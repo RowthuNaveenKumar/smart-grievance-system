@@ -1,5 +1,5 @@
 import AppRoutes from "./routes/AppRoutes";
-
+import "./app.css";
 function App() {
   return <AppRoutes />;
 }
