@@ -1,33 +1,79 @@
-HELP.md
+###############################
+# Maven / Java
+###############################
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+*.class
+*.log
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
+###############################
+# Spring Boot Artifacts
+###############################
+*.jar
+*.war
+*.zip
 
-### IntelliJ IDEA ###
-.idea
-*.iws
+###############################
+# IntelliJ IDEA
+###############################
+.idea/
 *.iml
+*.iws
 *.ipr
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+###############################
+# Eclipse / STS
+###############################
+.classpath
+.project
+.settings/
+.apt_generated/
+.factorypath/
+.springBeans/
+.sts4-cache/
 
-### VS Code ###
+###############################
+# NetBeans
+###############################
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+###############################
+# VS Code
+###############################
 .vscode/
+
+###############################
+# OS Junk Files
+###############################
+.DS_Store
+Thumbs.db
+
+###############################
+# Logging
+###############################
+logs/
+*.log
+
+###############################
+# Environment / Secrets
+###############################
+application-local.properties
+*.env
+.env*
+
+###############################
+# Temp & Swap Files
+###############################
+*.tmp
+*.swp
+*.swo
+
+###############################
+# Node / React (If frontend is inside repo)
+###############################
+node_modules/
+dist/
+build/
