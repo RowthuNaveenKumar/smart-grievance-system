@@ -60,7 +60,7 @@ logs/
 ###############################
 # Environment / Secrets
 ###############################
-application-local.properties
+application.properties
 *.env
 .env*
 
