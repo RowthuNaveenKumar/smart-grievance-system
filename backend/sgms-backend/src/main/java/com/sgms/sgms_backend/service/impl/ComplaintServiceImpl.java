@@ -44,9 +44,13 @@ public class ComplaintServiceImpl implements ComplaintService {
             RestTemplate rest = new RestTemplate();
             mlResponse = rest.postForObject(
                     mlApiUrl,
-                    new MLRequest(request.getDescription()),
+                    new MLRequest(
+                            request.getDescription(),
+                            request.getTitle()
+                    ),
                     MLResponse.class
             );
+
         } catch (Exception e) {
             System.out.println("ML server not available. Using default values.");
         }

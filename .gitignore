@@ -1,3 +1,4 @@
+### JAVA BACKEND ###
 # Compiled class file
 *.class
 
@@ -10,6 +11,10 @@
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 
+# Build outputs
+target/
+out/
+
 # Package Files #
 *.jar
 *.war
@@ -19,6 +24,37 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# JVM crash logs 
 hs_err_pid*
 replay_pid*
+
+### PYTHON ML-SERVICE ###
+# Virtual environment
+ml-service/venv/
+
+# Python cache
+ml-service/__pycache__/
+ml-service/**/*.pyc
+ml-service/**/*.pyo
+ml-service/**/*.pyd
+
+# Python build files
+ml-service/build/
+ml-service/dist/
+
+### IDE DIRECTORIES (important) ###
+# IntelliJ / PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+### OS files ###
+# Windows / Mac temporary files
+Thumbs.db
+.DS_Store
+
+### MISC ###
+# Environment files
+*.env
+.env.*
