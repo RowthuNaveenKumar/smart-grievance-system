@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+
 import Login from "../pages/Login";
-import Register from "../pages/Register";
+import SignIn from "../pages/SignIn";
 import Dashboard from "../pages/Dashboard";
 
 export default function AppRoutes() {
@@ -8,7 +9,7 @@ export default function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        <Route path="/signin" element={<SignIn />} />
         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
