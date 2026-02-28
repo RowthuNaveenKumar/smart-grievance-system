@@ -1,9 +1,9 @@
 package com.sgms.sgms_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.UpdateTimestamp;
-
 import java.time.LocalDateTime;
 
 @Data
@@ -13,7 +13,8 @@ public class StudentInfo {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "student_id")
+    private Long studentId;
 
     @Column(nullable = false, length = 100)
     private String name;
@@ -21,22 +22,36 @@ public class StudentInfo {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(length = 255)
+    @Column(nullable = false, length = 255)
+    @JsonIgnore
     private String password;
 
     @Column(nullable = false, length = 100)
     private String department;
 
-    @Column(name = "class_name", length = 100)
-    private String className;
+    @Column(name = "division_name", length = 100)
+    private String divisionName;
 
     @Column(length = 10)
     private String year;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-    private LocalDateTime updatedAt;
-
     @Column(name = "enrollment_no", unique = true, length = 100)
     private String enrollmentNo;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    // RELATIONS
+    @ManyToOne
+    @JoinColumn(name = "division_id")
+    private AcademicDivision academicDivision;
+
+    @ManyToOne
+    @JoinColumn(name = "hostel_id")
+    private Hostel hostel;
+
+    @ManyToOne
+    @JoinColumn(name = "floor_id")
+    private HostelFloor hostelFloor;
 }
