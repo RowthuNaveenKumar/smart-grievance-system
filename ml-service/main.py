@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from preprocess import clean_text
-from model import predict_department, predict_priority
+from model import predict_department, predict_priority, calculate_confidence
 
 app = FastAPI(
     title="SGMS ML Service",
@@ -34,6 +34,18 @@ def health():
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(data: ComplaintRequest):
+    cleaned_text = clean_text(data.complaint_text)
+
+    department = predict_department(cleaned_text)
+    priority = predict_priority(cleaned_text)
+    confidence = calculate_confidence(cleaned_text)
+
+    return {
+        "predicted_department": department,
+        "predicted_priority": priority,
+        "confidence": confidence
+    }
+
     cleaned_text = clean_text(data.complaint_text)
 
     department = predict_department(cleaned_text)
