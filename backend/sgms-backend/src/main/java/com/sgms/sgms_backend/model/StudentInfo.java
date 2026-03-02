@@ -22,21 +22,15 @@ public class StudentInfo {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(nullable = false, length = 255)
     @JsonIgnore
+    @Column(nullable = false, length = 255)
     private String password;
 
-    @Column(nullable = false, length = 100)
-    private String department;
-
-    @Column(name = "division_name", length = 100)
-    private String divisionName;
+    @Column(name = "enrollment_no", unique = true)
+    private String enrollmentNo;
 
     @Column(length = 10)
     private String year;
-
-    @Column(name = "enrollment_no", unique = true, length = 100)
-    private String enrollmentNo;
 
     @UpdateTimestamp
     @Column(name = "updated_at")
@@ -48,10 +42,10 @@ public class StudentInfo {
     private AcademicDivision academicDivision;
 
     @ManyToOne
-    @JoinColumn(name = "hostel_id")
-    private Hostel hostel;
+    @JoinColumn(name = "room_id")
+    private Room room;
 
     @ManyToOne
-    @JoinColumn(name = "floor_id")
-    private HostelFloor hostelFloor;
+    @JoinColumn(name = "hostel_id")
+    private Hostel hostel;
 }

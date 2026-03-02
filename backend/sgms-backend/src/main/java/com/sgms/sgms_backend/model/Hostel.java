@@ -17,5 +17,5 @@ public class Hostel {
     private String name;
 
     @Column(nullable = false)
-    private String type;
+    private String type; // BOYS / GIRLS
 }

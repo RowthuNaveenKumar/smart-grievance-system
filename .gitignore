@@ -58,3 +58,19 @@ Thumbs.db
 # Environment files
 *.env
 .env.*
+
+
+### ML Service ###
+ml-service/.venv/
+ml-service/__pycache__/
+ml-service/models/
+ml-service/*.pickle
+
+### Backend ###
+backend/sgms-backend/uploads/
+backend/sgms-backend/target/
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

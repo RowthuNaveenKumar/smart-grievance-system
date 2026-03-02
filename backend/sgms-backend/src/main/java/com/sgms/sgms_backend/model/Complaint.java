@@ -1,9 +1,10 @@
 package com.sgms.sgms_backend.model;
 
+import com.sgms.sgms_backend.enums.Priority;
+import com.sgms.sgms_backend.enums.ComplaintStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.UpdateTimestamp;
-
 import java.time.LocalDateTime;
 
 @Data
@@ -30,31 +31,27 @@ public class Complaint {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
-    @Column(nullable = false)
     private String category;
 
     @Column(name = "ml_predicted_category")
     private String mlPredictedCategory;
 
-    @Column(nullable = false)
-    private String priority;
+    @Enumerated(EnumType.STRING)
+    private Priority priority;
 
     @Column(name = "ml_predicted_priority")
     private String mlPredictedPriority;
 
-    @Column(name = "current_level", nullable = false)
+    @Column(name = "current_level")
     private String currentLevel;
 
-    @Column(nullable = false)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    private ComplaintStatus status;
 
-    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
 }
