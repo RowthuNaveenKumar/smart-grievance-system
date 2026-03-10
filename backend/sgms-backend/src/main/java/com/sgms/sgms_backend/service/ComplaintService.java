@@ -1,9 +1,7 @@
 package com.sgms.sgms_backend.service;
 
-import com.sgms.sgms_backend.dto.ComplaintRequest;
-import com.sgms.sgms_backend.dto.ComplaintResponse;
-import com.sgms.sgms_backend.dto.MLRequest;
-import com.sgms.sgms_backend.dto.MLResponse;
+import com.sgms.sgms_backend.dto.*;
+import com.sgms.sgms_backend.enums.ComplaintAction;
 import com.sgms.sgms_backend.model.Complaint;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,4 +20,9 @@ public interface ComplaintService {
     ComplaintResponse getComplaintById(Long id);
 
     List<ComplaintResponse> getStudentComplaints(Long studentId);
+
+    ComplaintResponse updateStatus(Long id, ComplaintAction action, ActionRequest req);
+    ComplaintResponse escalateComplaint(Long id, ActionRequest req);
+    ComplaintResponse assignStaff(Long id, Long staffId);
+    ComplaintResponse studentFeedback(Long id, boolean accepted);
 }

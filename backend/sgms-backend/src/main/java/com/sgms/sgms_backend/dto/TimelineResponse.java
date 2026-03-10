@@ -12,5 +12,6 @@ public class TimelineResponse {
     private String fromStatus;
     private String toStatus;
     private String performedBy;
+    private String note;
     private LocalDateTime createdAt;
 }

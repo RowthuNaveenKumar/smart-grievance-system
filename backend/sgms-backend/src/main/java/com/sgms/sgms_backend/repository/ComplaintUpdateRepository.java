@@ -7,5 +7,6 @@ import java.util.List;
 
 public interface ComplaintUpdateRepository extends JpaRepository<ComplaintUpdate, Long> {
 
-    List<ComplaintUpdate> findByComplaint_ComplaintIdOrderByCreatedAtAsc(Long complaintId);
+    List<ComplaintUpdate> findByComplaintComplaintIdOrderByCreatedAtAsc(Long complaintId);
+
 }

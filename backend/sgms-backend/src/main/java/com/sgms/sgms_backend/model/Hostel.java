@@ -1,5 +1,6 @@
 package com.sgms.sgms_backend.model;
 
+import com.sgms.sgms_backend.enums.HostelType;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -16,6 +17,7 @@ public class Hostel {
     @Column(nullable = false)
     private String name;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String type; // BOYS / GIRLS
+    private HostelType type;
 }

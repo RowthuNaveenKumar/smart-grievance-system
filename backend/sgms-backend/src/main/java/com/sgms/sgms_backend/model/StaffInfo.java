@@ -1,10 +1,12 @@
 package com.sgms.sgms_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.LocalDateTime;
+import java.util.Set;
 
 @Data
 @Entity
@@ -16,25 +18,26 @@ public class StaffInfo {
     @Column(name = "staff_id")
     private Long staffId;
 
+    @Column(nullable = false)
     private String name;
 
-    @Column(unique = true)
+    @Column(nullable = false, unique = true)
     private String email;
 
-    @JsonIgnore
-    private String password;
-
-    private String department;
-
-    private String role;
+    @OneToOne
+    @JoinColumn(name = "user_id")
+    private User user;
 
     private String phone;
+
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // RELATIONS
     @ManyToOne
     @JoinColumn(name = "division_id")
     private AcademicDivision academicDivision;
@@ -43,7 +46,11 @@ public class StaffInfo {
     @JoinColumn(name = "floor_id")
     private HostelFloor hostelFloor;
 
-    @ManyToOne
-    @JoinColumn(name = "hostel_id")
-    private Hostel hostel;
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "staff_role",
+            joinColumns = @JoinColumn(name = "staff_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<Role> roles;
 }

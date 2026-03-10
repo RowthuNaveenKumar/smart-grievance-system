@@ -13,10 +13,10 @@ public class AcademicDivision {
     @Column(name = "division_id")
     private Long divisionId;
 
-    @Column(nullable = false)
+    @Column(nullable = false,unique = true)
     private String name;
 
     @ManyToOne
-    @JoinColumn(name = "department_id")
+    @JoinColumn(name = "department_id",unique = true)
     private Department department;
 }

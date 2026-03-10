@@ -1,9 +1,11 @@
 package com.sgms.sgms_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.sgms.sgms_backend.enums.StudentYear;
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.LocalDateTime;
 
 @Data
@@ -16,36 +18,36 @@ public class StudentInfo {
     @Column(name = "student_id")
     private Long studentId;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, unique = true)
     private String email;
 
-    @JsonIgnore
-    @Column(nullable = false, length = 255)
-    private String password;
+    @OneToOne
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    @Column(name = "enrollment_no", unique = true)
+
+    @Column(name = "enrollment_no", nullable = false, unique = true)
     private String enrollmentNo;
 
-    @Column(length = 10)
-    private String year;
+    @Enumerated(EnumType.STRING)
+    private StudentYear year;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    // RELATIONS
     @ManyToOne
-    @JoinColumn(name = "division_id")
+    @JoinColumn(name = "division_id", nullable = false)
     private AcademicDivision academicDivision;
 
     @ManyToOne
     @JoinColumn(name = "room_id")
     private Room room;
 
-    @ManyToOne
-    @JoinColumn(name = "hostel_id")
-    private Hostel hostel;
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }

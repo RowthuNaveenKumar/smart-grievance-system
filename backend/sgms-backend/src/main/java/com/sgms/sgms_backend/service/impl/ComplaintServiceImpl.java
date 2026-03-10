@@ -1,8 +1,8 @@
 package com.sgms.sgms_backend.service.impl;
 
 import com.sgms.sgms_backend.dto.*;
-import com.sgms.sgms_backend.model.*;
 import com.sgms.sgms_backend.enums.*;
+import com.sgms.sgms_backend.model.*;
 import com.sgms.sgms_backend.repository.*;
 import com.sgms.sgms_backend.service.ComplaintService;
 
@@ -24,26 +24,31 @@ public class ComplaintServiceImpl implements ComplaintService {
     private String mlApiUrl;
 
     private final StudentInfoRepository studentRepo;
-    private final ComplaintRepository complaintRepo;
     private final StaffInfoRepository staffRepo;
+    private final ComplaintRepository complaintRepo;
     private final ComplaintFileRepository fileRepo;
     private final ComplaintUpdateRepository updateRepo;
+    private final EscalationMatrixRepository escalationRepo;
 
     public ComplaintServiceImpl(
             StudentInfoRepository studentRepo,
-            ComplaintRepository complaintRepo,
             StaffInfoRepository staffRepo,
+            ComplaintRepository complaintRepo,
             ComplaintFileRepository fileRepo,
-            ComplaintUpdateRepository updateRepo
+            ComplaintUpdateRepository updateRepo,
+            EscalationMatrixRepository escalationRepo
     ) {
         this.studentRepo = studentRepo;
-        this.complaintRepo = complaintRepo;
         this.staffRepo = staffRepo;
+        this.complaintRepo = complaintRepo;
         this.fileRepo = fileRepo;
         this.updateRepo = updateRepo;
+        this.escalationRepo = escalationRepo;
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       ML PREDICTION
+    ========================================= */
 
     @Override
     public MLResponse predict(MLRequest request) {
@@ -51,18 +56,23 @@ public class ComplaintServiceImpl implements ComplaintService {
         return rest.postForObject(mlApiUrl, request, MLResponse.class);
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       CREATE COMPLAINT
+    ========================================= */
 
     @Override
-    public ComplaintResponse createComplaint(
-            ComplaintRequest request,
-            List<MultipartFile> files
-    ) {
+    public ComplaintResponse createComplaint(ComplaintRequest request,
+                                             List<MultipartFile> files) {
+
+        if (request.getStudentId() == null) {
+            throw new RuntimeException("Student ID is required");
+        }
+
         StudentInfo student = studentRepo.findById(request.getStudentId())
                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-        // ML Prediction (if ML server available)
         MLResponse mlResponse = null;
+
         try {
             RestTemplate rest = new RestTemplate();
             mlResponse = rest.postForObject(
@@ -70,85 +80,199 @@ public class ComplaintServiceImpl implements ComplaintService {
                     new MLRequest(request.getDescription(), request.getTitle()),
                     MLResponse.class
             );
-        } catch (Exception e) {
-            System.out.println("ML not available → Using defaults");
-        }
+        } catch (Exception ignored) {}
 
-        // Create Complaint Object
+        ComplaintCategory category = determineCategory(request, mlResponse);
+        Priority priority = determinePriority(request, mlResponse);
+
         Complaint complaint = new Complaint();
+
         complaint.setStudent(student);
         complaint.setTitle(request.getTitle());
         complaint.setDescription(request.getDescription());
-        complaint.setCreatedAt(LocalDateTime.now());
+        complaint.setCategory(category);
+        complaint.setPriority(priority);
         complaint.setStatus(ComplaintStatus.OPEN);
-
-        // Normalized Category
-        String normalized = normalizeCategory(
-                mlResponse != null ? mlResponse.getPredictedDepartment() : "GENERAL"
-        );
-        complaint.setCategory(normalized);
-
-        complaint.setPriority(
-                mlResponse != null ?
-                        Priority.valueOf(mlResponse.getPredictedPriority().toUpperCase()) :
-                        Priority.LOW
-        );
+        complaint.setEscalationLevel(1);
 
         if (mlResponse != null) {
             complaint.setMlPredictedCategory(mlResponse.getPredictedDepartment());
             complaint.setMlPredictedPriority(mlResponse.getPredictedPriority());
+            complaint.setMlConfidence(java.math.BigDecimal.valueOf(mlResponse.getConfidence()));
         }
 
-        StaffInfo assigned = autoAssign(normalized, student);
-        complaint.setAssignedTo(assigned);
-
-        if (assigned != null)
-            complaint.setCurrentLevel(assigned.getRole());
-        else
-            complaint.setCurrentLevel("UNASSIGNED");
+        StaffInfo assignedStaff = autoAssign(category);
+        complaint.setAssignedTo(assignedStaff);
 
         complaint = complaintRepo.save(complaint);
 
-        // Save Files
         List<String> fileUrls = saveFiles(files, complaint);
 
-        // Create timeline entry
-        ComplaintUpdate update = new ComplaintUpdate();
-        update.setComplaint(complaint);
-        update.setAction(ComplaintAction.SUBMITTED.name());
-        update.setToStatus(ComplaintStatus.OPEN);
-        update.setPerformedBy(null);          // Students are not staff
-        update.setCreatedAt(LocalDateTime.now());
-
-        updateRepo.save(update);
+        createTimeline(
+                complaint,
+                ComplaintAction.SUBMITTED.name(),
+                null,
+                ComplaintStatus.OPEN,
+                null
+        );
 
         return buildResponse(complaint, fileUrls);
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       AUTO ASSIGN USING ESCALATION MATRIX
+    ========================================= */
+
+    private StaffInfo autoAssign(ComplaintCategory category) {
+
+        EscalationMatrix matrix =
+                escalationRepo.findByCategoryAndLevel(category, 1)
+                        .orElse(null);
+
+        if (matrix == null) return null;
+
+        Role role = matrix.getRole();
+
+        return staffRepo.findFirstByRolesContains(role).orElse(null);
+    }
+
+    /* =========================================
+       ESCALATE COMPLAINT
+    ========================================= */
+
+    @Override
+    public ComplaintResponse escalateComplaint(Long id, ActionRequest req) {
+
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+
+        int nextLevel = complaint.getEscalationLevel() + 1;
+
+        EscalationMatrix matrix =
+                escalationRepo.findByCategoryAndLevel(
+                        complaint.getCategory(),
+                        nextLevel
+                ).orElseThrow(() ->
+                        new RuntimeException("No further escalation"));
+
+        Role role = matrix.getRole();
+
+        StaffInfo staff =
+                staffRepo.findFirstByRolesContains(role)
+                        .orElseThrow(() ->
+                                new RuntimeException("Staff not found"));
+
+        complaint.setAssignedTo(staff);
+        complaint.setEscalationLevel(nextLevel);
+        complaint.setStatus(ComplaintStatus.ESCALATED);
+
+        complaintRepo.save(complaint);
+
+        createTimeline(
+                complaint,
+                ComplaintAction.ESCALATED.name(),
+                ComplaintStatus.OPEN,
+                ComplaintStatus.ESCALATED,
+                req.getNote()
+        );
+
+        return getComplaintById(id);
+    }
+
+    /* =========================================
+       UPDATE STATUS
+    ========================================= */
+
+    @Override
+    public ComplaintResponse updateStatus(Long id,
+                                          ComplaintAction action,
+                                          ActionRequest req) {
+
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+
+        ComplaintStatus oldStatus = complaint.getStatus();
+        ComplaintStatus newStatus = action.toStatus();
+
+        complaint.setStatus(newStatus);
+
+        if (newStatus == ComplaintStatus.RESOLVED) {
+            complaint.setResolvedAt(LocalDateTime.now());
+        }
+
+        complaintRepo.save(complaint);
+
+        createTimeline(
+                complaint,
+                action.name(),
+                oldStatus,
+                newStatus,
+                req.getNote()
+        );
+
+        return getComplaintById(id);
+    }
+
+    /* =========================================
+       ADMIN ASSIGN STAFF
+    ========================================= */
+
+    @Override
+    public ComplaintResponse assignStaff(Long id, Long staffId) {
+
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+
+        StaffInfo staff = staffRepo.findById(staffId)
+                .orElseThrow(() -> new RuntimeException("Staff not found"));
+
+        complaint.setAssignedTo(staff);
+
+        complaintRepo.save(complaint);
+
+        createTimeline(
+                complaint,
+                ComplaintAction.AUTO_ASSIGNED.name(),
+                complaint.getStatus(),
+                complaint.getStatus(),
+                "Assigned by admin"
+        );
+
+        return getComplaintById(id);
+    }
+
+    /* =========================================
+       GET COMPLAINT
+    ========================================= */
 
     @Override
     public ComplaintResponse getComplaintById(Long id) {
-        Complaint complaint = complaintRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Not found"));
 
-        List<String> files = fileRepo.findByComplaint_ComplaintId(id)
-                .stream()
-                .map(ComplaintFile::getFileUrl)
-                .toList();
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+
+        List<String> files =
+                fileRepo.findByComplaintComplaintId(id)
+                        .stream()
+                        .map(ComplaintFile::getFileUrl)
+                        .toList();
 
         return buildResponse(complaint, files);
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       GET STUDENT COMPLAINTS
+    ========================================= */
 
     @Override
     public List<ComplaintResponse> getStudentComplaints(Long studentId) {
-        return complaintRepo.findByStudent_StudentId(studentId)
+
+        return complaintRepo.findByStudentStudentId(studentId)
                 .stream()
                 .map(c -> buildResponse(
                         c,
-                        fileRepo.findByComplaint_ComplaintId(c.getComplaintId())
+                        fileRepo.findByComplaintComplaintId(
+                                        c.getComplaintId())
                                 .stream()
                                 .map(ComplaintFile::getFileUrl)
                                 .toList()
@@ -156,55 +280,95 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .toList();
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       FILE UPLOAD
+    ========================================= */
 
-    private List<String> saveFiles(List<MultipartFile> files, Complaint complaint) {
+    private List<String> saveFiles(List<MultipartFile> files,
+                                   Complaint complaint) {
 
-        List<String> fileUrls = new ArrayList<>();
+        List<String> urls = new ArrayList<>();
 
-        if (files == null) return fileUrls;
+        if (files == null) return urls;
 
         for (MultipartFile file : files) {
 
-            String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-            Path path = Paths.get("./uploads/" + filename);
-
             try {
+
+                String filename =
+                        UUID.randomUUID() + "_" +
+                                file.getOriginalFilename();
+
+                Path path = Paths.get("./uploads/" + filename);
+
                 Files.createDirectories(path.getParent());
                 Files.write(path, file.getBytes());
+
+                ComplaintFile cf = new ComplaintFile();
+                cf.setComplaint(complaint);
+                cf.setFileUrl("/uploads/" + filename);
+
+                fileRepo.save(cf);
+
+                urls.add(cf.getFileUrl());
+
             } catch (Exception e) {
                 throw new RuntimeException("File upload failed");
             }
-
-            ComplaintFile cf = new ComplaintFile();
-            cf.setComplaint(complaint);
-            cf.setFileUrl("./uploads/" + filename);
-            cf.setUploadedAt(LocalDateTime.now());
-
-            fileRepo.save(cf);
-            fileUrls.add(cf.getFileUrl());
         }
 
-        return fileUrls;
+        return urls;
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       TIMELINE
+    ========================================= */
 
-    private ComplaintResponse buildResponse(Complaint complaint, List<String> files) {
+    private void createTimeline(Complaint complaint,
+                                String action,
+                                ComplaintStatus from,
+                                ComplaintStatus to,
+                                String note) {
+
+        ComplaintUpdate update = new ComplaintUpdate();
+
+        update.setComplaint(complaint);
+        update.setAction(action);
+        update.setFromStatus(from);
+        update.setToStatus(to);
+        update.setNote(note);
+
+        updateRepo.save(update);
+    }
+
+    /* =========================================
+       RESPONSE BUILDER
+    ========================================= */
+
+    private ComplaintResponse buildResponse(Complaint complaint,
+                                            List<String> files) {
 
         List<TimelineResponse> timeline =
-                updateRepo.findByComplaint_ComplaintIdOrderByCreatedAtAsc(
+                updateRepo
+                        .findByComplaintComplaintIdOrderByCreatedAtAsc(
                                 complaint.getComplaintId())
                         .stream()
                         .map(u -> TimelineResponse.builder()
                                 .action(u.getAction())
-                                .fromStatus(u.getFromStatus() != null ? u.getFromStatus().name() : null)
-                                .toStatus(u.getToStatus().name())
+                                .fromStatus(
+                                        u.getFromStatus() != null ?
+                                                u.getFromStatus().name() : null
+                                )
+                                .toStatus(
+                                        u.getToStatus() != null ?
+                                                u.getToStatus().name() : null
+                                )
                                 .performedBy(
                                         u.getPerformedBy() != null ?
                                                 u.getPerformedBy().getName() :
-                                                "STUDENT"
+                                                "SYSTEM"
                                 )
+                                .note(u.getNote())
                                 .createdAt(u.getCreatedAt())
                                 .build())
                         .toList();
@@ -213,10 +377,9 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .complaintId(complaint.getComplaintId())
                 .title(complaint.getTitle())
                 .description(complaint.getDescription())
-                .category(complaint.getCategory())
+                .category(complaint.getCategory().name())
                 .priority(complaint.getPriority().name())
                 .status(complaint.getStatus().name())
-                .currentLevel(complaint.getCurrentLevel())
                 .assignedTo(
                         complaint.getAssignedTo() != null ?
                                 complaint.getAssignedTo().getName() : null
@@ -227,64 +390,79 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .build();
     }
 
-    // ----------------------------------------------------------------------
+    /* =========================================
+       CATEGORY + PRIORITY HELPERS
+    ========================================= */
 
-    private StaffInfo autoAssign(String category, StudentInfo student) {
+    private ComplaintCategory determineCategory(
+            ComplaintRequest req,
+            MLResponse ml) {
 
-        if (category.equalsIgnoreCase("HOSTEL")) {
 
-            if (student.getHostel() == null)
-                return null;
-
-            return staffRepo
-                    .findByRoleIgnoreCaseAndHostel_HostelId(
-                            "WARDEN",
-                            student.getHostel().getHostelId()
-                    ).orElse(null);
+        // If frontend already provided category
+        if (req.getCategory() != null) {
+            return req.getCategory();
         }
 
-        if (category.equalsIgnoreCase("ACADEMIC")) {
-
-            if (student.getAcademicDivision() == null)
-                return null;
-
-            return staffRepo.findByRoleIgnoreCaseAndAcademicDivision_DivisionId(
-                    "MFT",
-                    student.getAcademicDivision().getDivisionId()
-            ).orElse(null);
+        // If ML predicted something
+        if (ml != null && ml.getPredictedDepartment() != null) {
+            try {
+                return ComplaintCategory.valueOf(
+                        ml.getPredictedDepartment().toUpperCase()
+                );
+            } catch (Exception ignored) {}
         }
 
-        return null;
+        System.out.println("Category received: " + req.getCategory());
+        // Default category
+        return ComplaintCategory.GENERAL;
     }
 
-    // ----------------------------------------------------------------------
+    private Priority determinePriority(
+            ComplaintRequest req,
+            MLResponse ml) {
 
-    private String normalizeCategory(String input) {
-        if (input == null) return "GENERAL";
-
-        switch (input.toUpperCase()) {
-            case "HOSTEL":
-            case "ROOM":
-            case "MESS":
-            case "CLEANING":
-                return "HOSTEL";
-
-            case "ACADEMIC":
-            case "STUDY":
-            case "EXAM":
-            case "CLASS":
-                return "ACADEMIC";
-
-            case "LIBRARY":
-            case "BOOK":
-                return "LIBRARY";
-
-            case "MEDICAL":
-            case "HEALTH":
-                return "MEDICAL";
-
-            default:
-                return "GENERAL";
+        if (req.getPriority() != null) {
+            return req.getPriority();
         }
+
+        if (ml != null && ml.getPredictedPriority() != null) {
+            try {
+                return Priority.valueOf(
+                        ml.getPredictedPriority().toUpperCase()
+                );
+            } catch (Exception ignored) {}
+        }
+        System.out.println("Priority received: " + req.getPriority());
+        return Priority.LOW;
     }
+
+
+    @Override
+    public ComplaintResponse studentFeedback(Long id, boolean accepted) {
+
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+
+        ComplaintStatus oldStatus = complaint.getStatus();
+
+        if (accepted) {
+            complaint.setStatus(ComplaintStatus.RESOLVED);
+        } else {
+            complaint.setStatus(ComplaintStatus.OPEN);
+        }
+
+        complaintRepo.save(complaint);
+
+        createTimeline(
+                complaint,
+                accepted ? "STUDENT_ACCEPTED" : "STUDENT_REJECTED",
+                oldStatus,
+                complaint.getStatus(),
+                accepted ? "Student accepted resolution" : "Student rejected resolution"
+        );
+
+        return getComplaintById(id);
+    }
+
 }

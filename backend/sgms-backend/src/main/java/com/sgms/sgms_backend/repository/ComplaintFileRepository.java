@@ -7,5 +7,6 @@ import java.util.List;
 
 public interface ComplaintFileRepository extends JpaRepository<ComplaintFile, Long> {
 
-    List<ComplaintFile> findByComplaint_ComplaintId(Long complaintId);
+    List<ComplaintFile> findByComplaintComplaintId(Long complaintId);
+
 }

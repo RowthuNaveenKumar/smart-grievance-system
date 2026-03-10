@@ -14,7 +14,7 @@ public class HostelFloor {
     private Long floorId;
 
     @ManyToOne
-    @JoinColumn(name = "hostel_id")
+    @JoinColumn(name = "hostel_id", nullable = false)
     private Hostel hostel;
 
     @Column(name = "floor_number")
