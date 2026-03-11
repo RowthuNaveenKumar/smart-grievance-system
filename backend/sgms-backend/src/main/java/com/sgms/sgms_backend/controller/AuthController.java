@@ -10,98 +10,77 @@ import com.sgms.sgms_backend.repository.StudentInfoRepository;
 import com.sgms.sgms_backend.repository.UserRepository;
 import com.sgms.sgms_backend.service.AuthService;
 
-import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
+
 @RestController
 @RequestMapping("/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
+    private final UserRepository userRepository;
     private final StudentInfoRepository studentRepo;
     private final StaffInfoRepository staffRepo;
-    private final UserRepository userRepo;
 
-    public AuthController(AuthService authService,
-                          StudentInfoRepository studentRepo,
-                          StaffInfoRepository staffRepo, UserRepository userRepo){
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest req) {
 
-        this.authService = authService;
-        this.studentRepo = studentRepo;
-        this.staffRepo = staffRepo;
-        this.userRepo = userRepo;
+        return ResponseEntity.ok(authService.login(req));
     }
 
     @PostMapping("/signin")
-    public ResponseEntity<AuthResponse> signin(@Valid @RequestBody RegisterRequest req) {
+    public ResponseEntity<AuthResponse> signin(@RequestBody RegisterRequest req) {
+
         return ResponseEntity.ok(authService.signin(req));
     }
 
-    @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest req){
-        return authService.login(req);
-    }
-
     @GetMapping("/me")
-    public UserProfileResponse me() {
+    public ResponseEntity<UserProfileResponse> me() {
 
-        Authentication auth = SecurityContextHolder
-                .getContext()
-                .getAuthentication();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
-        if (auth == null || auth.getPrincipal() == null) {
-            throw new RuntimeException("Unauthorized");
-        }
+        String email = auth.getName();
 
-        String email = auth.getPrincipal().toString();
+        User user = userRepository.findByEmail(email).orElseThrow(() ->
+                new RuntimeException("User not found"));
 
-        User user = userRepo.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-    /* =============================
-       STUDENT PROFILE
-    ============================== */
+        Object profile = null;
+        String role = null;
 
         if (user.getAccountType() == AccountType.STUDENT) {
 
-            StudentInfo student = studentRepo
-                    .findByUser_UserId(user.getUserId())
-                    .orElseThrow(() ->
-                            new RuntimeException("Student profile not found"));
+            StudentInfo student = studentRepo.findByUser_UserId(user.getUserId())
+                    .orElse(null);
 
-            return new UserProfileResponse(
-                    user.getUserId(),
-                    user.getEmail(),
-                    user.getAccountType(),
-                    "STUDENT",
-                    student
-            );
+            profile = student;
+
+        } else {
+
+            StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId()).orElse(null);
+
+            profile = staff;
+
+            if (staff != null && !staff.getRoles().isEmpty()) {
+                role = staff.getRoles().iterator().next().getRoleName();
+            }
         }
 
-    /* =============================
-       STAFF PROFILE
-    ============================== */
+        return ResponseEntity.ok(
 
-        StaffInfo staff = staffRepo
-                .findByUser_UserId(user.getUserId())
-                .orElseThrow(() ->
-                        new RuntimeException("Staff profile not found"));
+                new UserProfileResponse(user.getUserId(),
+                        user.getEmail(),
+                        user.getAccountType(),
+                        role,
+                        profile)
 
-        String role = staff.getRoles()
-                .stream()
-                .findFirst()
-                .map(r -> r.getRoleName())
-                .orElse("STAFF");
-
-        return new UserProfileResponse(
-                user.getUserId(),
-                user.getEmail(),
-                user.getAccountType(),
-                role,
-                staff
         );
     }
+
 }

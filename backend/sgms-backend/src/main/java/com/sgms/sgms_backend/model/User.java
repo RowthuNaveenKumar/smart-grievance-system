@@ -2,6 +2,7 @@ package com.sgms.sgms_backend.model;
 
 import com.sgms.sgms_backend.enums.AccountType;
 import jakarta.persistence.*;
+import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 

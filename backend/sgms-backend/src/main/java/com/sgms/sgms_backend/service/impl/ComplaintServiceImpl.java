@@ -12,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
 import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -23,6 +26,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     @Value("${ml.api.url}")
     private String mlApiUrl;
 
+    private final UserRepository userRepo;
     private final StudentInfoRepository studentRepo;
     private final StaffInfoRepository staffRepo;
     private final ComplaintRepository complaintRepo;
@@ -31,13 +35,14 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final EscalationMatrixRepository escalationRepo;
 
     public ComplaintServiceImpl(
-            StudentInfoRepository studentRepo,
+            UserRepository userRepo, StudentInfoRepository studentRepo,
             StaffInfoRepository staffRepo,
             ComplaintRepository complaintRepo,
             ComplaintFileRepository fileRepo,
             ComplaintUpdateRepository updateRepo,
             EscalationMatrixRepository escalationRepo
     ) {
+        this.userRepo = userRepo;
         this.studentRepo = studentRepo;
         this.staffRepo = staffRepo;
         this.complaintRepo = complaintRepo;
@@ -64,11 +69,9 @@ public class ComplaintServiceImpl implements ComplaintService {
     public ComplaintResponse createComplaint(ComplaintRequest request,
                                              List<MultipartFile> files) {
 
-        if (request.getStudentId() == null) {
-            throw new RuntimeException("Student ID is required");
-        }
+        String email = getCurrentUserEmail();
 
-        StudentInfo student = studentRepo.findById(request.getStudentId())
+        StudentInfo student = studentRepo.findByUserEmail(email)
                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
         MLResponse mlResponse = null;
@@ -80,7 +83,8 @@ public class ComplaintServiceImpl implements ComplaintService {
                     new MLRequest(request.getDescription(), request.getTitle()),
                     MLResponse.class
             );
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         ComplaintCategory category = determineCategory(request, mlResponse);
         Priority priority = determinePriority(request, mlResponse);
@@ -410,7 +414,8 @@ public class ComplaintServiceImpl implements ComplaintService {
                 return ComplaintCategory.valueOf(
                         ml.getPredictedDepartment().toUpperCase()
                 );
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         System.out.println("Category received: " + req.getCategory());
@@ -431,7 +436,8 @@ public class ComplaintServiceImpl implements ComplaintService {
                 return Priority.valueOf(
                         ml.getPredictedPriority().toUpperCase()
                 );
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         System.out.println("Priority received: " + req.getPriority());
         return Priority.LOW;
@@ -465,4 +471,43 @@ public class ComplaintServiceImpl implements ComplaintService {
         return getComplaintById(id);
     }
 
+
+    private String getCurrentUserEmail() {
+
+        Authentication auth =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        return auth.getName();
+    }
+
+    /* =========================================
+       STUDENT VIEW OWN COMPLAINTS
+   ========================================= */
+    @Override
+    public List<ComplaintResponse> getMyComplaints() {
+
+        Authentication auth =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        String email = auth.getName();
+
+        User user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        StudentInfo student =
+                studentRepo.findByUser_UserId(user.getUserId())
+                        .orElseThrow(() -> new RuntimeException("Student not found"));
+
+        return complaintRepo
+                .findByStudentStudentId(student.getStudentId())
+                .stream()
+                .map(c -> buildResponse(
+                        c,
+                        fileRepo.findByComplaintComplaintId(c.getComplaintId())
+                                .stream()
+                                .map(ComplaintFile::getFileUrl)
+                                .toList()
+                ))
+                .toList();
+    }
 }

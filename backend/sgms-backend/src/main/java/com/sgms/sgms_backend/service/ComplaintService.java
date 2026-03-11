@@ -21,8 +21,13 @@ public interface ComplaintService {
 
     List<ComplaintResponse> getStudentComplaints(Long studentId);
 
+    List<ComplaintResponse> getMyComplaints();
+
     ComplaintResponse updateStatus(Long id, ComplaintAction action, ActionRequest req);
+
     ComplaintResponse escalateComplaint(Long id, ActionRequest req);
+
     ComplaintResponse assignStaff(Long id, Long staffId);
+
     ComplaintResponse studentFeedback(Long id, boolean accepted);
 }

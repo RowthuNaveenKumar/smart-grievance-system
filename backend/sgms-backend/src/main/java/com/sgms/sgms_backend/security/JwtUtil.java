@@ -16,10 +16,12 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    private final long EXPIRATION = 86400000; // 24h
+    private final long EXPIRATION=86400000;
 
-    private Key getSigningKey(){
+    private Key getKey(){
+
         return Keys.hmacShaKeyFor(secret.getBytes());
+
     }
 
     public String generateToken(String email,String role,String userType){
@@ -30,27 +32,19 @@ public class JwtUtil {
                 .claim("userType",userType)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis()+EXPIRATION))
-                .signWith(getSigningKey())
+                .signWith(getKey())
                 .compact();
+
     }
 
     public Claims extractClaims(String token){
 
         return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+                .setSigningKey(getKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+
     }
 
-    public boolean validateToken(String token){
-
-        try{
-            extractClaims(token);
-            return true;
-        }
-        catch(Exception e){
-            return false;
-        }
-    }
 }

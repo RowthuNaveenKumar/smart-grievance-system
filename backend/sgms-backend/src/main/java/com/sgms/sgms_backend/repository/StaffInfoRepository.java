@@ -3,11 +3,12 @@ package com.sgms.sgms_backend.repository;
 import com.sgms.sgms_backend.model.Role;
 import com.sgms.sgms_backend.model.StaffInfo;
 import org.springframework.data.jpa.repository.*;
-import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
+@Repository
 public interface StaffInfoRepository extends JpaRepository<StaffInfo, Long> {
 
 
