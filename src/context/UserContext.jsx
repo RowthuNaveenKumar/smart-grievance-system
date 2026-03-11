@@ -8,17 +8,27 @@ export const UserProvider = ({ children }) => {
 
   const loadUser = async () => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+
+    if (!token) {
+      setUser(null);
+      return;
+    }
 
     try {
-      const res = await api.get("/auth/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get("/auth/me");
+
       setUser(res.data);
-      localStorage.setItem("user", JSON.stringify(res.data));
+      // localStorage.setItem("user", JSON.stringify(res.data));
     } catch (err) {
-      console.error("Failed to load user:", err);
+      console.error("Invalid session");
+      localStorage.clear();
+      setUser(null);
     }
+  };
+
+  const logout = () => {
+    localStorage.clear();
+    setUser(null);
   };
 
   useEffect(() => {
@@ -26,7 +36,7 @@ export const UserProvider = ({ children }) => {
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, loadUser }}>
+    <UserContext.Provider value={{ user, loadUser, logout }}>
       {children}
     </UserContext.Provider>
   );

@@ -32,24 +32,24 @@ export default function SignIn() {
   // Combined handler
   const handleSignIn = async (e) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
 
-    // Frontend validations
+    setError("");
+
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      setLoading(false);
       return;
     }
 
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
+
     try {
-      // Your real API call
+      localStorage.clear();
+
       await axios.post("http://localhost:8080/auth/signin", {
         email,
         password,
@@ -61,15 +61,18 @@ export default function SignIn() {
         navigate("/login");
       }, 2000);
     } catch (err) {
-      setError("Sign-in failed ❌");
+      console.log(err.response?.data);
+      setError(err.response?.data?.message || "Sign-in failed ❌");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 
-                    bg-linear-to-br from-blue-50 to-indigo-50">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-12 
+                    bg-linear-to-br from-blue-50 to-indigo-50"
+    >
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -77,25 +80,27 @@ export default function SignIn() {
       >
         {/* Top Icon + Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-16 w-16 
+          <div
+            className="inline-flex items-center justify-center h-16 w-16 
                           bg-linear-to-br from-indigo-600 to-blue-700 
-                          rounded-2xl mb-4 shadow-xl">
+                          rounded-2xl mb-4 shadow-xl"
+          >
             <Shield className="h-8 w-8 text-white" />
           </div>
 
           <h1 className="text-3xl font-bold text-slate-900">
             First Time Sign In
           </h1>
-          <p className="text-slate-600">
-            Set your password to get started
-          </p>
+          <p className="text-slate-600">Set your password to get started</p>
         </div>
 
         {/* Main Card */}
         <Card className="border-slate-200 shadow-xl rounded-2xl">
           <CardHeader>
             <CardTitle>Create Password</CardTitle>
-            <CardDescription>Your email must be registered by admin</CardDescription>
+            <CardDescription>
+              Your email must be registered by admin
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -105,8 +110,10 @@ export default function SignIn() {
                 animate={{ scale: 1, opacity: 1 }}
                 className="text-center py-8"
               >
-                <div className="h-16 w-16 bg-green-100 rounded-full 
-                                flex items-center justify-center mx-auto mb-4">
+                <div
+                  className="h-16 w-16 bg-green-100 rounded-full 
+                                flex items-center justify-center mx-auto mb-4"
+                >
                   <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
 
@@ -117,11 +124,12 @@ export default function SignIn() {
               </motion.div>
             ) : (
               <form onSubmit={handleSignIn} className="space-y-4">
-
                 {/* Error Box */}
                 {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 
-                                  flex items-start gap-2">
+                  <div
+                    className="bg-red-50 border border-red-200 rounded-lg p-3 
+                                  flex items-start gap-2"
+                  >
                     <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
                     <p className="text-sm text-red-800">{error}</p>
                   </div>
@@ -131,8 +139,10 @@ export default function SignIn() {
                 <div className="space-y-2">
                   <Label htmlFor="email">University Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 
-                                     h-5 w-5 text-slate-400" />
+                    <Mail
+                      className="absolute left-3 top-1/2 -translate-y-1/2 
+                                     h-5 w-5 text-slate-400"
+                    />
 
                     <Input
                       id="email"
@@ -153,8 +163,10 @@ export default function SignIn() {
                 <div className="space-y-2">
                   <Label htmlFor="password">Create Password</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 
-                                     h-5 w-5 text-slate-400" />
+                    <Lock
+                      className="absolute left-3 top-1/2 -translate-y-1/2 
+                                     h-5 w-5 text-slate-400"
+                    />
                     <Input
                       id="password"
                       type="password"
@@ -171,8 +183,10 @@ export default function SignIn() {
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 
-                                     h-5 w-5 text-slate-400" />
+                    <Lock
+                      className="absolute left-3 top-1/2 -translate-y-1/2 
+                                     h-5 w-5 text-slate-400"
+                    />
                     <Input
                       id="confirmPassword"
                       type="password"

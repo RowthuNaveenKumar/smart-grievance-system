@@ -1,22 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import moment from "moment";
+import { motion } from "framer-motion";
 
 import { api } from "@/services/api";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
+
+import { useUser } from "@/context/UserContext";
 
 import {
   ArrowLeft,
-  FileText,
   Clock,
   User,
+  FileText,
   AlertTriangle,
   Loader2,
+  ChevronRight,
 } from "lucide-react";
 
 export default function ComplaintDetails() {
@@ -26,7 +28,8 @@ export default function ComplaintDetails() {
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load complaint
+  const { user } = useUser();
+
   useEffect(() => {
     loadComplaint();
   }, [id]);
@@ -34,21 +37,21 @@ export default function ComplaintDetails() {
   const loadComplaint = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await api.get(`/complaints/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get(`/complaints/${id}`);
 
-      setComplaint(response.data);
+      setComplaint(res.data);
     } catch (err) {
       console.error("Error loading complaint:", err);
     }
-
     setLoading(false);
   };
 
+  // ----------------------
+  // Loading Screen
+  // ----------------------
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
+      <div className="flex items-center justify-center h-[70vh]">
         <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
       </div>
     );
@@ -63,146 +66,141 @@ export default function ComplaintDetails() {
     );
   }
 
+  // ----------------------
+  // UI STARTS
+  // ----------------------
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Back button */}
+    <div className="max-w-5xl mx-auto px-4 py-4 space-y-6">
+
+      {/* Back Button */}
       <Button
         variant="ghost"
         onClick={() => navigate(-1)}
-        className="text-slate-500 hover:text-slate-700 -ml-2"
+        className="flex items-center text-slate-600 hover:text-slate-900"
       >
-        <ArrowLeft className="w-4 h-4 mr-2" /> Back
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back
       </Button>
 
-      {/* CARD */}
+      {/* Main Card */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <Card className="rounded-2xl shadow-sm border-slate-100">
-          <div className="bg-linear-to-r from-indigo-600 to-purple-600 p-6">
-            <h1 className="text-xl md:text-2xl font-bold text-white">
-              {complaint.title}
-            </h1>
+        <Card className="rounded-2xl border-0 shadow-lg overflow-hidden">
+
+          {/* Header Gradient */}
+          <div className="p-8 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+            <h1 className="text-2xl font-bold">{complaint.title}</h1>
             <p className="text-indigo-200 text-sm mt-1">
               Submitted {moment(complaint.createdAt).fromNow()}
             </p>
           </div>
 
-          <CardContent className="p-6 space-y-6">
-            <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+          <CardContent className="p-8 space-y-8">
+
+            {/* Description */}
+            <p className="text-slate-700 text-lg leading-relaxed">
               {complaint.description}
             </p>
 
-            {/* TAGS */}
-            <div className="flex gap-2 mt-3">
-              <Badge className="bg-indigo-600 text-white">
-                {complaint.category}
-              </Badge>
-              <Badge className="bg-purple-600 text-white">
-                Priority: {complaint.priority}
-              </Badge>
-              <Badge className="bg-green-600 text-white">
-                {complaint.status}
-              </Badge>
+            {/* Tags */}
+            <div className="flex flex-wrap gap-3 mt-4">
+              <Badge className="bg-indigo-600">{complaint.category}</Badge>
+              <Badge className="bg-purple-600">Priority: {complaint.priority}</Badge>
+              <Badge className="bg-green-600">{complaint.status}</Badge>
             </div>
 
-            <hr className="my-6" />
-
-            {/* METADATA GRID */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                  Category
-                </p>
-                <span className="text-sm font-medium text-slate-700">
-                  {complaint.category}
-                </span>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                  Status
-                </p>
-                <span className="text-sm font-medium text-slate-700">
-                  {complaint.status}
-                </span>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                  Assigned To
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-indigo-500" />
-                  <span className="text-sm font-medium text-slate-700">
-                    {complaint.assignedTo || "Unassigned"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
-                  Created At
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-amber-500" />
-                  <span className="text-sm font-medium text-slate-700">
-                    {moment(complaint.createdAt).format("DD MMM YYYY")}
-                  </span>
-                </div>
-              </div>
+            {/* Info Boxes */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <InfoBox title="Category" value={complaint.category} />
+              <InfoBox title="Status" value={complaint.status} />
+              <InfoBox
+                title="Assigned To"
+                value={complaint.assignedTo || "Unassigned"}
+                icon={<User className="w-4 h-4 text-indigo-500" />}
+              />
+              <InfoBox
+                title="Created At"
+                value={moment(complaint.createdAt).format("DD MMM YYYY")}
+                icon={<Clock className="w-4 h-4 text-amber-500" />}
+              />
             </div>
 
-            {/* FILE ATTACHMENTS */}
+            {/* Attachments */}
             {complaint.files?.length > 0 && (
-              <div className="mt-6">
-                <p className="text-sm font-semibold text-slate-600 mb-2">
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-700">
                   Attachments
                 </p>
-                <div className="flex flex-wrap gap-2">
+
+                <div className="flex flex-col gap-3">
                   {complaint.files.map((file, i) => (
                     <a
                       key={i}
                       href={file}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 rounded-lg px-3 py-2 text-sm text-indigo-600 transition"
+                      className="flex items-center justify-between bg-slate-50 hover:bg-slate-100 px-4 py-3 rounded-xl text-indigo-600 transition border border-slate-200"
                     >
-                      <FileText className="w-4 h-4" />
-                      Attachment {i + 1}
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-indigo-500" />
+                        <span>Attachment {i + 1}</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
                     </a>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* TIMELINE */}
-            <div>
-              <h3 className="font-semibold text-slate-700 mb-3">
+            {/* Timeline */}
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold text-slate-700 mb-3">
                 Activity Timeline
               </h3>
 
-              <div className="space-y-4">
-                {complaint.timeline?.map((t, i) => (
-                  <div
-                    key={i}
-                    className="border-l-2 border-indigo-300 pl-4 py-2 space-y-1"
-                  >
-                    <p className="text-sm font-semibold text-slate-700">
-                      {t.action}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {t.fromStatus} → {t.toStatus}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      by {t.performedBy} •{" "}
-                      {moment(t.createdAt).format("DD MMM, HH:mm")}
-                    </p>
-                  </div>
+              <div className="space-y-5">
+                {complaint.timeline?.map((t, index) => (
+                  <TimelineItem key={index} item={t} />
                 ))}
               </div>
             </div>
+
           </CardContent>
         </Card>
       </motion.div>
+    </div>
+  );
+}
+
+// -----------------------------
+// Small Components
+// -----------------------------
+
+function InfoBox({ title, value, icon }) {
+  return (
+    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm">
+      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
+        {title}
+      </p>
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-sm font-medium text-slate-700">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function TimelineItem({ item }) {
+  return (
+    <div className="relative pl-6 border-l-2 border-indigo-200">
+      <div className="absolute -left-[6px] top-1 w-3 h-3 bg-indigo-500 rounded-full"></div>
+
+      <p className="text-sm font-semibold text-slate-800">{item.action}</p>
+      <p className="text-xs text-slate-500 mb-1">
+        {item.fromStatus} → {item.toStatus}
+      </p>
+      <p className="text-xs text-slate-400">
+        by {item.performedBy} • {moment(item.createdAt).format("DD MMM, HH:mm")}
+      </p>
     </div>
   );
 }
