@@ -83,18 +83,18 @@ export default function SignIn() {
             <Shield className="h-8 w-8 text-white" />
           </div>
 
-          <h1 className="text-3xl font-bold text-slate-900">
-            First Time Sign In
+          <h1 className="text-2xl font-bold ">
+             Sign In
           </h1>
           <p className="text-slate-600">
-            Set your password to get started
+            Enter your details to get started
           </p>
         </div>
 
         {/* Main Card */}
         <Card className="border-slate-200 shadow-xl rounded-2xl">
           <CardHeader>
-            <CardTitle>Create Password</CardTitle>
+            <CardTitle>Create an account</CardTitle>
             <CardDescription>Your email must be registered by admin</CardDescription>
           </CardHeader>
 
@@ -200,7 +200,7 @@ export default function SignIn() {
             {!success && (
               <div className="mt-6 text-center">
                 <p className="text-sm text-slate-600">
-                  Already have a password?{" "}
+                  Already have an account?{" "}
                   <a
                     href="/login"
                     className="text-indigo-600 hover:text-indigo-700 font-medium"
