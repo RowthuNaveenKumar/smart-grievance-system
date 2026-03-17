@@ -1,20 +1,20 @@
 use sgdb;
 -- Department Data-----------------
 INSERT INTO department (department_id, name) VALUES
-('CSE'),
-('IT'),
-('AI/DS'),
-('Mechanical'),
-('Civil'),
-('EEE'),
-('ECE'),
-('Administration'),
-('Exam Cell'),
-('Library'),
-('Hostel'),
-('Transport'),
-('Sports'),
-('Medical');
+(1'CSE'),
+(2'IT'),
+(3'AI/DS'),
+(4'Mechanical'),
+(5'Civil'),
+(6'EEE'),
+(7'ECE'),
+(8'Administration'),
+(9'Exam Cell'),
+(10'Library'),
+(11'Hostel'),
+(12'Transport'),
+(13'Sports'),
+(14'Medical');
 
 -- Academic Division Data
 INSERT INTO academic_division (division_id, name, department_id) VALUES
@@ -53,13 +53,13 @@ INSERT INTO hostel_floor (floor_id, hostel_id, floor_number) VALUES
 
 -- Room Data------------------------
 INSERT INTO room (room_id, floor_id, room_number, capacity, current_occupancy) VALUES
-(1,1,'101',2,0),(2,1,'102',2,0),(3,1,'103',2,0),(4,1,'104',2,0),
+(1,1,'101',2,1),(2,1,'102',2,0),(3,1,'103',2,0),(4,1,'104',2,0),
 (5,2,'201',3,0),(6,2,'202',3,0),(7,2,'203',3,0),(8,2,'204',3,0),
 (9,3,'301',4,0),(10,3,'302',4,0),(11,3,'303',4,0),(12,3,'304',4,0),
 (13,4,'101',2,0),(14,4,'102',2,0),(15,4,'103',2,0),(16,4,'104',2,0),
 (17,5,'201',3,0),(18,5,'202',3,0),(19,5,'203',3,0),(20,5,'204',3,0),
 (21,6,'301',4,0),(22,6,'302',4,0),(23,6,'303',4,0),(24,6,'304',4,0),
-(25,7,'101',2,0),(26,7,'102',2,0),(27,7,'103',2,0),(28,7,'104',2,0),
+(25,7,'101',2,1),(26,7,'102',2,0),(27,7,'103',2,0),(28,7,'104',2,0),
 (29,8,'201',3,0),(30,8,'202',3,0),(31,8,'203',3,0),(32,8,'204',3,0),
 (33,9,'301',4,0),(34,9,'302',4,0),(35,9,'303',4,0),(36,9,'304',4,0),
 (37,10,'101',2,0),(38,10,'102',2,0),(39,10,'103',2,0),(40,10,'104',2,0),
@@ -79,9 +79,10 @@ INSERT INTO role (role_id, role_name) VALUES
 INSERT INTO staff_info (staff_id, name, email, phone, division_id, floor_id) VALUES
 (1,'Naveen Kumar','naveen@sgms.com','9876543210',NULL,NULL),
 (2,'Priya Sharma','priya@sgms.com','9876543211',9,NULL),
-(3,'Prof. Amit Shah','amit@sgms.com','839489283',NULL,NULL),
-(4,'Dr. Rakesh Patel','rakesh@sgms.com','672836384',NULL,NULL),
-(5,'Patel Rajputh','patel@sgmsadmin.com','839489234',NULL,NULL);
+(3,'Prof. Amit Shah','amit@sgmshod.com','839489283',NULL,NULL),
+(4,'Dr.Rakesh Patel','rakesh@sgmsdean.com','672836384',NULL,NULL),
+(5,'Patel Rajputh','patel@sgmswarden.com','839489234',NULL,1);
+(6,'Geetha','sandeep@sgmswarden.com','8072382917',NULL,7);
 
 -- staff_role Data-------------------
 INSERT INTO staff_role (staff_id, role_id) VALUES
@@ -89,9 +90,9 @@ INSERT INTO staff_role (staff_id, role_id) VALUES
 (2,2),
 (3,4),
 (4,5),
-(5,1);
-select*from student_info;
-DESCRIBE TABLE student_info;
+(5,6),
+(6,6);
+
 -- Student_info data--------------------------
 INSERT INTO student_info (student_id,name,email,year,enrollment_no,division_id,room_id) VALUES
 (1,'Rithish Chowdary','rithish@sgms.com','THIRD_YEAR','2303031240505',1,1),
@@ -102,3 +103,5 @@ INSERT INTO escalation_matrix (id, category, level, role_id, resolution_time_hou
 (1,'ACADEMIC',1,2,24),
 (2,'ACADEMIC',2,4,48),
 (3,'ACADEMIC',3,5,72);
+(4,'HOSTEL',1,6,24),     -- Warden gets 24 hours
+(5,'HOSTEL',2,1,48);     -- Admin gets 48 hours
