@@ -216,3 +216,17 @@ VALUES
 -- -- Hostel complaints
 -- (4,'HOSTEL',1,6,24),     -- Warden gets 24 hours
 -- (5,'HOSTEL',2,1,48);     -- Admin gets 48 hours
+SHOW CREATE TABLE complaint_updates;
+SHOW CREATE TABLE complaint_files;
+SHOW CREATE TABLE complaints;
+SHOW CREATE TABLE staff_role;
+SHOW CREATE TABLE student_info;
+SHOW CREATE TABLE staff_info;
+SHOW CREATE TABLE room;
+SHOW CREATE TABLE hostel_floor;
+SHOW CREATE TABLE hostel;
+SHOW CREATE TABLE academic_division;
+SHOW CREATE TABLE department;
+SHOW CREATE TABLE role;
+SHOW CREATE TABLE escalation_matrix;
+SHOW CREATE TABLE users;

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS hostel (
 CREATE TABLE IF NOT EXISTS role (
     role_id INT NOT NULL AUTO_INCREMENT,
     role_name VARCHAR(100) NOT NULL,
+    assignment_scope ENUM('DIVISION','DEPARTMENT','FLOOR','GLOBAL'),
 
     PRIMARY KEY (role_id),
     UNIQUE (role_name)
@@ -97,6 +98,7 @@ CREATE TABLE IF NOT EXISTS staff_info (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     division_id INT DEFAULT NULL,
     floor_id INT DEFAULT NULL,
+    department_id INT,
 
     PRIMARY KEY (staff_id),
     UNIQUE (email),
@@ -104,6 +106,11 @@ CREATE TABLE IF NOT EXISTS staff_info (
 
     KEY fk_staff_division (division_id),
     KEY fk_staff_floor (floor_id),
+
+    CONSTRAINT fk_staff_department
+        FOREIGN KEY (department_id)
+        REFERENCES department(department_id)
+        ON DELETE SET NULL,
 
     CONSTRAINT fk_staff_division
         FOREIGN KEY (division_id)
@@ -174,32 +181,94 @@ CREATE TABLE IF NOT EXISTS staff_role (
         ON DELETE RESTRICT
 );
 -- escalation_matrix-----------------------------------
-CREATE TABLE IF NOT EXISTS escalation_matrix (
-    id INT NOT NULL AUTO_INCREMENT,
-    category ENUM(
-'HOSTEL',
-'ACADEMIC',
-'LIBRARY',
-'MEDICAL',
-'TRANSPORT',
-'IT',
-'FACILITY',
-'SPORTS',
-'ADMIN',
-'GENERAL'
-) NOT NULL,
+-- CREATE TABLE IF NOT EXISTS escalation_matrix (
+--     id INT NOT NULL AUTO_INCREMENT,
+--     category ENUM(
+-- 'HOSTEL',
+-- 'ACADEMIC',
+-- 'LIBRARY',
+-- 'MEDICAL',
+-- 'TRANSPORT',
+-- 'IT',
+-- 'FACILITY',
+-- 'SPORTS',
+-- 'ADMIN',
+-- 'GENERAL'
+-- ) NOT NULL,
+--     level INT NOT NULL,
+--     role_id INT NOT NULL,
+--     resolution_time_hours INT NOT NULL,
+
+--     PRIMARY KEY (id),
+--     KEY role_id (role_id),
+
+--     CONSTRAINT escalation_matrix_ibfk_1
+--         FOREIGN KEY (role_id)
+--         REFERENCES role(role_id)
+--         ON DELETE RESTRICT
+-- );
+-- ALTER TABLE escalation_matrix
+-- DROP FOREIGN KEY escalation_matrix_ibfk_1;
+
+-- Workflow-------------------------------
+CREATE TABLE IF NOT EXISTS workflow (
+    workflow_id INT AUTO_INCREMENT PRIMARY KEY,
+    department_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+
+    UNIQUE(department_id),
+
+    CONSTRAINT fk_workflow_department
+        FOREIGN KEY (department_id)
+        REFERENCES department(department_id)
+        ON DELETE CASCADE
+);
+-- Workfow steps---------------
+CREATE TABLE IF NOT EXISTS workflow_steps (
+    step_id INT AUTO_INCREMENT PRIMARY KEY,
+    workflow_id INT NOT NULL,
     level INT NOT NULL,
     role_id INT NOT NULL,
-    resolution_time_hours INT NOT NULL,
+    resolution_time_hours INT,
 
-    PRIMARY KEY (id),
-    KEY role_id (role_id),
+    CONSTRAINT fk_step_workflow
+        FOREIGN KEY (workflow_id)
+        REFERENCES workflow(workflow_id)
+        ON DELETE CASCADE,
 
-    CONSTRAINT escalation_matrix_ibfk_1
+    CONSTRAINT fk_step_role
         FOREIGN KEY (role_id)
         REFERENCES role(role_id)
-        ON DELETE RESTRICT
+        ON DELETE RESTRICT,
+
+    UNIQUE (workflow_id, level) -- important
 );
+
+-- ALTER TABLE complaints
+-- ADD current_level INT DEFAULT 1 AFTER escalation_level,
+-- ADD workflow_id INT AFTER escalation_level;
+
+-- ALTER TABLE complaints
+-- ADD CONSTRAINT fk_complaint_workflow
+-- FOREIGN KEY (workflow_id)
+-- REFERENCES workflow(workflow_id)
+-- ON DELETE SET NULL;
+
+-- ALTER TABLE complaints
+-- DROP COLUMN category;
+
+-- CREATE CATEGORY TABLE (REPLACE ENUM) in complaints
+CREATE TABLE IF NOT EXISTS complaint_category (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    department_id INT NOT NULL,
+
+    UNIQUE(name, department_id),
+    FOREIGN KEY (department_id)
+    REFERENCES department(department_id)
+    ON DELETE CASCADE
+);
+
 --  complaints-----------------------------------------
 CREATE TABLE IF NOT EXISTS complaints (
     complaint_id INT NOT NULL AUTO_INCREMENT,
@@ -207,12 +276,16 @@ CREATE TABLE IF NOT EXISTS complaints (
     assigned_staff_id INT DEFAULT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
-    category ENUM('HOSTEL','ACADEMIC','LIBRARY','MEDICAL','TRANSPORT','IT','FACILITY','SPORTS','ADMIN','GENERAL') NOT NULL,
+    category_id INT,
+    department_id INT,
+    -- category ENUM('HOSTEL','ACADEMIC','LIBRARY','MEDICAL','TRANSPORT','IT','FACILITY','SPORTS','ADMIN','GENERAL') NOT NULL,
     ml_predicted_category VARCHAR(100) DEFAULT NULL,
     priority ENUM('LOW','MEDIUM','HIGH','CRITICAL') NOT NULL DEFAULT 'LOW',
     ml_predicted_priority VARCHAR(50) DEFAULT NULL,
     ml_confidence DECIMAL(5,4) DEFAULT NULL,
     escalation_level INT DEFAULT 1,
+    workflow_id INT,
+    current_level INT DEFAULT 1,
     status ENUM('OPEN','IN_PROGRESS','ESCALATED','RESOLVED','REJECTED') NOT NULL DEFAULT 'OPEN',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -226,10 +299,28 @@ CREATE TABLE IF NOT EXISTS complaints (
     KEY idx_complaint_priority (priority),
     KEY idx_complaint_status_priority (status, priority),
 
+    KEY idx_complaint_created (created_at),
+    KEY idx_complaints_workflow(workflow_id),
+    KEY idx_complaint_department(department_id),
+
     CONSTRAINT fk_complaint_staff
         FOREIGN KEY (assigned_staff_id)
         REFERENCES staff_info(staff_id)
         ON DELETE SET NULL,
+
+    CONSTRAINT fk_complaint_workflow
+        FOREIGN KEY (workflow_id)
+        REFERENCES workflow(workflow_id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT fk_complaint_category
+        FOREIGN KEY (category_id)
+        REFERENCES complaint_category(category_id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT fk_complaint_department
+        FOREIGN KEY (department_id)
+        REFERENCES department(department_id),
 
     CONSTRAINT fk_complaint_student
         FOREIGN KEY (student_id)
@@ -277,3 +368,43 @@ CREATE TABLE IF NOT EXISTS complaint_updates (
         REFERENCES staff_info(staff_id)
         ON DELETE SET NULL
 );
+
+-- ALTER TABLE complaints
+-- ADD category_id INT,
+-- ADD department_id INT
+-- AFTER description;
+
+-- ALTER TABLE complaints
+-- ADD CONSTRAINT fk_complaint_category
+-- FOREIGN KEY (category_id)
+-- REFERENCES complaint_category(category_id);
+
+-- ALTER TABLE complaints
+-- ADD CONSTRAINT fk_complaint_department
+-- FOREIGN KEY (department_id)
+-- REFERENCES department(department_id);
+
+-- ALTER TABLE staff_info
+-- ADD department_id INT;
+
+-- ALTER TABLE staff_info
+-- ADD CONSTRAINT fk_staff_department
+-- FOREIGN KEY (department_id)
+-- REFERENCES department(department_id)
+-- ON DELETE SET NULL;
+
+-- ALTER TABLE workflow
+-- ADD UNIQUE(department_id);
+
+-- ALTER TABLE complaint_category
+-- ADD UNIQUE(name, department_id); 
+
+-- ALTER TABLE role
+-- ADD assignment_scope ENUM(
+-- 'DIVISION',
+-- 'DEPARTMENT',
+-- 'FLOOR',
+-- 'GLOBAL'
+-- );
+
+

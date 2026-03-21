@@ -21,3 +21,17 @@ WHERE email NOT IN (SELECT email FROM users);
 UPDATE staff_info AS s
 JOIN users u ON s.email = u.email
 SET s.user_id = u.user_id;
+
+-- Verify Your Mapping
+SELECT s.name, r.role_name
+FROM staff_info s
+JOIN staff_role sr ON s.staff_id = sr.staff_id
+JOIN role r ON sr.role_id = r.role_id;
+
+-- Find Staff/ Now complaint should go to that staff
+SELECT s.staff_id, s.name
+FROM staff_info s
+JOIN staff_role sr ON s.staff_id = sr.staff_id
+WHERE sr.role_id = 7;
+
+-- Assign Complaint Automatically
