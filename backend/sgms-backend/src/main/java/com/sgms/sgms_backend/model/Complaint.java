@@ -1,6 +1,5 @@
 package com.sgms.sgms_backend.model;
 
-import com.sgms.sgms_backend.enums.ComplaintCategory;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import com.sgms.sgms_backend.enums.Priority;
 import jakarta.persistence.*;
@@ -29,7 +28,7 @@ public class Complaint {
     private StudentInfo student;
 
     @ManyToOne
-    @JoinColumn(name = "assigned_to")
+    @JoinColumn(name = "assigned_staff_id")
     private StaffInfo assignedTo;
 
     @Column(nullable = false)
@@ -38,9 +37,20 @@ public class Complaint {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @ManyToOne
+    @JoinColumn(name="category_id")
     private ComplaintCategory category;
+
+    @ManyToOne
+    @JoinColumn(name="department_id")
+    private Department department;
+
+    @ManyToOne
+    @JoinColumn(name="workflow_id")
+    private Workflow workflow;
+
+    @Column(name="current_level")
+    private Integer currentLevel;
 
     @Column(name = "ml_predicted_category")
     private String mlPredictedCategory;

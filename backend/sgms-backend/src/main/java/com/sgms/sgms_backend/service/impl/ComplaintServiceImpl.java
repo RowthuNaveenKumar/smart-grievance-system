@@ -6,6 +6,10 @@ import com.sgms.sgms_backend.model.*;
 import com.sgms.sgms_backend.repository.*;
 import com.sgms.sgms_backend.service.ComplaintService;
 
+import com.sgms.sgms_backend.service.assignment.ComplaintAssignmentService;
+import com.sgms.sgms_backend.service.file.ComplaintFileService;
+import com.sgms.sgms_backend.service.timeline.ComplaintTimelineService;
+import com.sgms.sgms_backend.service.workflow.ComplaintWorkflowService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,25 +34,33 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final StudentInfoRepository studentRepo;
     private final StaffInfoRepository staffRepo;
     private final ComplaintRepository complaintRepo;
-    private final ComplaintFileRepository fileRepo;
-    private final ComplaintUpdateRepository updateRepo;
-    private final EscalationMatrixRepository escalationRepo;
+    private final ComplaintCategoryRepository categoryRepo;
+
+    private final ComplaintAssignmentService assignmentService;
+    private final ComplaintWorkflowService workflowService;
+    private final ComplaintFileService fileService;
+    private final ComplaintTimelineService timelineService;
+
 
     public ComplaintServiceImpl(
-            UserRepository userRepo, StudentInfoRepository studentRepo,
+            UserRepository userRepo,
+            StudentInfoRepository studentRepo,
             StaffInfoRepository staffRepo,
-            ComplaintRepository complaintRepo,
-            ComplaintFileRepository fileRepo,
-            ComplaintUpdateRepository updateRepo,
-            EscalationMatrixRepository escalationRepo
+            ComplaintRepository complaintRepo, ComplaintCategoryRepository categoryRepo,
+            ComplaintAssignmentService assignmentService,
+            ComplaintWorkflowService workflowService,
+            ComplaintFileService fileService,
+            ComplaintTimelineService timelineService
     ) {
         this.userRepo = userRepo;
         this.studentRepo = studentRepo;
         this.staffRepo = staffRepo;
         this.complaintRepo = complaintRepo;
-        this.fileRepo = fileRepo;
-        this.updateRepo = updateRepo;
-        this.escalationRepo = escalationRepo;
+        this.categoryRepo = categoryRepo;
+        this.assignmentService = assignmentService;
+        this.workflowService = workflowService;
+        this.fileService = fileService;
+        this.timelineService = timelineService;
     }
 
     /* =========================================
@@ -97,47 +109,58 @@ public class ComplaintServiceImpl implements ComplaintService {
         complaint.setCategory(category);
         complaint.setPriority(priority);
         complaint.setStatus(ComplaintStatus.OPEN);
-        complaint.setEscalationLevel(1);
+//        complaint.setEscalationLevel(1);
+        complaint.setCurrentLevel(1);
 
-        if (mlResponse != null) {
-            complaint.setMlPredictedCategory(mlResponse.getPredictedDepartment());
-            complaint.setMlPredictedPriority(mlResponse.getPredictedPriority());
-            complaint.setMlConfidence(java.math.BigDecimal.valueOf(mlResponse.getConfidence()));
-        }
+        Department department = category.getDepartment();
 
-        StaffInfo assignedStaff = autoAssign(category);
+        Workflow workflow = workflowService.getWorkflowForDepartment(department);
+
+        complaint.setDepartment(department);
+        complaint.setWorkflow(workflow);
+
+        StaffInfo assignedStaff =
+                assignmentService.assignStaff(department, 1);
+
+        complaint.setDepartment(department);
         complaint.setAssignedTo(assignedStaff);
 
         complaint = complaintRepo.save(complaint);
 
-        List<String> fileUrls = saveFiles(files, complaint);
+        fileService.saveFiles(files, complaint);
 
-        createTimeline(
+        timelineService.createTimeline(
                 complaint,
-                ComplaintAction.SUBMITTED.name(),
+                "SUBMITTED",
                 null,
                 ComplaintStatus.OPEN,
                 null
         );
 
-        return buildResponse(complaint, fileUrls);
-    }
+        return getComplaintById(complaint.getComplaintId());
 
-    /* =========================================
-       AUTO ASSIGN USING ESCALATION MATRIX
-    ========================================= */
-
-    private StaffInfo autoAssign(ComplaintCategory category) {
-
-        EscalationMatrix matrix =
-                escalationRepo.findByCategoryAndLevel(category, 1)
-                        .orElse(null);
-
-        if (matrix == null) return null;
-
-        Role role = matrix.getRole();
-
-        return staffRepo.findFirstByRolesContains(role).orElse(null);
+//        if (mlResponse != null) {
+//            complaint.setMlPredictedCategory(mlResponse.getPredictedDepartment());
+//            complaint.setMlPredictedPriority(mlResponse.getPredictedPriority());
+//            complaint.setMlConfidence(java.math.BigDecimal.valueOf(mlResponse.getConfidence()));
+//        }
+//
+//        StaffInfo assignedStaff = autoAssign(category);
+//        complaint.setAssignedTo(assignedStaff);
+//
+//        complaint = complaintRepo.save(complaint);
+//
+//        List<String> fileUrls = saveFiles(files, complaint);
+//
+//        createTimeline(
+//                complaint,
+//                ComplaintAction.SUBMITTED.name(),
+//                null,
+//                ComplaintStatus.OPEN,
+//                null
+//        );
+//
+//        return buildResponse(complaint, fileUrls);
     }
 
     /* =========================================
@@ -150,16 +173,15 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Complaint not found"));
 
-        int nextLevel = complaint.getEscalationLevel() + 1;
+        int nextLevel = complaint.getCurrentLevel() + 1;
 
-        EscalationMatrix matrix =
-                escalationRepo.findByCategoryAndLevel(
-                        complaint.getCategory(),
+        WorkflowStep step =
+                workflowService.getNextStep(
+                        complaint.getWorkflow(),
                         nextLevel
-                ).orElseThrow(() ->
-                        new RuntimeException("No further escalation"));
+                );
 
-        Role role = matrix.getRole();
+        Role role = step.getRole();
 
         StaffInfo staff =
                 staffRepo.findFirstByRolesContains(role)
@@ -167,20 +189,30 @@ public class ComplaintServiceImpl implements ComplaintService {
                                 new RuntimeException("Staff not found"));
 
         complaint.setAssignedTo(staff);
-        complaint.setEscalationLevel(nextLevel);
+        complaint.setCurrentLevel(nextLevel);
         complaint.setStatus(ComplaintStatus.ESCALATED);
 
         complaintRepo.save(complaint);
 
-        createTimeline(
+        timelineService.createTimeline(
                 complaint,
-                ComplaintAction.ESCALATED.name(),
+                "ESCALATED",
                 ComplaintStatus.OPEN,
                 ComplaintStatus.ESCALATED,
                 req.getNote()
         );
 
         return getComplaintById(id);
+
+//        createTimeline(
+//                complaint,
+//                ComplaintAction.ESCALATED.name(),
+//                ComplaintStatus.OPEN,
+//                ComplaintStatus.ESCALATED,
+//                req.getNote()
+//        );
+//
+//        return getComplaintById(id);
     }
 
     /* =========================================
@@ -206,7 +238,7 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         complaintRepo.save(complaint);
 
-        createTimeline(
+        timelineService.createTimeline(
                 complaint,
                 action.name(),
                 oldStatus,
@@ -234,7 +266,7 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         complaintRepo.save(complaint);
 
-        createTimeline(
+        timelineService.createTimeline(
                 complaint,
                 ComplaintAction.AUTO_ASSIGNED.name(),
                 complaint.getStatus(),
@@ -255,13 +287,28 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Complaint not found"));
 
-        List<String> files =
-                fileRepo.findByComplaintComplaintId(id)
-                        .stream()
-                        .map(ComplaintFile::getFileUrl)
-                        .toList();
+        return ComplaintResponse.builder()
+                .complaintId(complaint.getComplaintId())
+                .title(complaint.getTitle())
+                .description(complaint.getDescription())
+                .category(complaint.getCategory().getName())
+                .priority(complaint.getPriority().name())
+                .status(complaint.getStatus().name())
+                .assignedTo(
+                        complaint.getAssignedTo() != null ?
+                                complaint.getAssignedTo().getName() : null
+                )
+                .createdAt(complaint.getCreatedAt())
+                .build();
 
-        return buildResponse(complaint, files);
+
+//        List<String> files =
+//                fileRepo.findByComplaintComplaintId(id)
+//                        .stream()
+//                        .map(ComplaintFile::getFileUrl)
+//                        .toList();
+//
+//        return buildResponse(complaint, files);
     }
 
     /* =========================================
@@ -273,125 +320,8 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         return complaintRepo.findByStudentStudentId(studentId)
                 .stream()
-                .map(c -> buildResponse(
-                        c,
-                        fileRepo.findByComplaintComplaintId(
-                                        c.getComplaintId())
-                                .stream()
-                                .map(ComplaintFile::getFileUrl)
-                                .toList()
-                ))
+                .map(this::mapToResponse)
                 .toList();
-    }
-
-    /* =========================================
-       FILE UPLOAD
-    ========================================= */
-
-    private List<String> saveFiles(List<MultipartFile> files,
-                                   Complaint complaint) {
-
-        List<String> urls = new ArrayList<>();
-
-        if (files == null) return urls;
-
-        for (MultipartFile file : files) {
-
-            try {
-
-                String filename =
-                        UUID.randomUUID() + "_" +
-                                file.getOriginalFilename();
-
-                Path path = Paths.get("./uploads/" + filename);
-
-                Files.createDirectories(path.getParent());
-                Files.write(path, file.getBytes());
-
-                ComplaintFile cf = new ComplaintFile();
-                cf.setComplaint(complaint);
-                cf.setFileUrl("/uploads/" + filename);
-
-                fileRepo.save(cf);
-
-                urls.add(cf.getFileUrl());
-
-            } catch (Exception e) {
-                throw new RuntimeException("File upload failed");
-            }
-        }
-
-        return urls;
-    }
-
-    /* =========================================
-       TIMELINE
-    ========================================= */
-
-    private void createTimeline(Complaint complaint,
-                                String action,
-                                ComplaintStatus from,
-                                ComplaintStatus to,
-                                String note) {
-
-        ComplaintUpdate update = new ComplaintUpdate();
-
-        update.setComplaint(complaint);
-        update.setAction(action);
-        update.setFromStatus(from);
-        update.setToStatus(to);
-        update.setNote(note);
-
-        updateRepo.save(update);
-    }
-
-    /* =========================================
-       RESPONSE BUILDER
-    ========================================= */
-
-    private ComplaintResponse buildResponse(Complaint complaint,
-                                            List<String> files) {
-
-        List<TimelineResponse> timeline =
-                updateRepo
-                        .findByComplaintComplaintIdOrderByCreatedAtAsc(
-                                complaint.getComplaintId())
-                        .stream()
-                        .map(u -> TimelineResponse.builder()
-                                .action(u.getAction())
-                                .fromStatus(
-                                        u.getFromStatus() != null ?
-                                                u.getFromStatus().name() : null
-                                )
-                                .toStatus(
-                                        u.getToStatus() != null ?
-                                                u.getToStatus().name() : null
-                                )
-                                .performedBy(
-                                        u.getPerformedBy() != null ?
-                                                u.getPerformedBy().getName() :
-                                                "SYSTEM"
-                                )
-                                .note(u.getNote())
-                                .createdAt(u.getCreatedAt())
-                                .build())
-                        .toList();
-
-        return ComplaintResponse.builder()
-                .complaintId(complaint.getComplaintId())
-                .title(complaint.getTitle())
-                .description(complaint.getDescription())
-                .category(complaint.getCategory().name())
-                .priority(complaint.getPriority().name())
-                .status(complaint.getStatus().name())
-                .assignedTo(
-                        complaint.getAssignedTo() != null ?
-                                complaint.getAssignedTo().getName() : null
-                )
-                .createdAt(complaint.getCreatedAt())
-                .files(files)
-                .timeline(timeline)
-                .build();
     }
 
     /* =========================================
@@ -400,27 +330,21 @@ public class ComplaintServiceImpl implements ComplaintService {
 
     private ComplaintCategory determineCategory(
             ComplaintRequest req,
-            MLResponse ml) {
+            MLResponse ml){
 
-
-        // If frontend already provided category
-        if (req.getCategory() != null) {
-            return req.getCategory();
+        if(req.getCategoryId()!=null){
+            return categoryRepo.findById(req.getCategoryId())
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
         }
 
-        // If ML predicted something
-        if (ml != null && ml.getPredictedDepartment() != null) {
-            try {
-                return ComplaintCategory.valueOf(
-                        ml.getPredictedDepartment().toUpperCase()
-                );
-            } catch (Exception ignored) {
-            }
+        if(ml!=null && ml.getPredictedDepartment()!=null){
+            return categoryRepo
+                    .findByName(ml.getPredictedDepartment())
+                    .orElse(null);
         }
 
-        System.out.println("Category received: " + req.getCategory());
-        // Default category
-        return ComplaintCategory.GENERAL;
+        return categoryRepo.findByName("GENERAL")
+                .orElseThrow(() -> new RuntimeException("Default category missing"));
     }
 
     private Priority determinePriority(
@@ -460,7 +384,7 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         complaintRepo.save(complaint);
 
-        createTimeline(
+        timelineService.createTimeline(
                 complaint,
                 accepted ? "STUDENT_ACCEPTED" : "STUDENT_REJECTED",
                 oldStatus,
@@ -486,10 +410,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     @Override
     public List<ComplaintResponse> getMyComplaints() {
 
-        Authentication auth =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        String email = auth.getName();
+        String email = getCurrentUserEmail();
 
         User user = userRepo.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -501,13 +422,25 @@ public class ComplaintServiceImpl implements ComplaintService {
         return complaintRepo
                 .findByStudentStudentId(student.getStudentId())
                 .stream()
-                .map(c -> buildResponse(
-                        c,
-                        fileRepo.findByComplaintComplaintId(c.getComplaintId())
-                                .stream()
-                                .map(ComplaintFile::getFileUrl)
-                                .toList()
-                ))
+                .map(this::mapToResponse)
                 .toList();
+    }
+
+    private ComplaintResponse mapToResponse(Complaint complaint) {
+
+        return ComplaintResponse.builder()
+                .complaintId(complaint.getComplaintId())
+                .title(complaint.getTitle())
+                .description(complaint.getDescription())
+                .category(complaint.getCategory().getName())
+                .priority(complaint.getPriority().name())
+                .status(complaint.getStatus().name())
+                .assignedTo(
+                        complaint.getAssignedTo() != null
+                                ? complaint.getAssignedTo().getName()
+                                : null
+                )
+                .createdAt(complaint.getCreatedAt())
+                .build();
     }
 }

@@ -28,6 +28,10 @@ public class StaffInfo {
     @JoinColumn(name="division_id")
     private AcademicDivision academicDivision;
 
+    @ManyToOne
+    @JoinColumn(name="department_id")
+    private Department department;
+
     // floor_id → hostel_floor table
     @ManyToOne
     @JoinColumn(name="floor_id")
