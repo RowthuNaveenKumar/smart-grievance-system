@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import StatsCard from "@/components/dashboard/StatsCard";
 import ComplaintCard from "@/components/complaints/ComplaintCard";
 
 import {
@@ -26,6 +25,7 @@ export default function StudentDashboard() {
   const [user, setUser] = useState(null);
   const [complaints, setComplaints] = useState([]);
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("ALL");
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
 
   const navigate = useNavigate();
@@ -47,10 +47,28 @@ export default function StudentDashboard() {
   };
 
   const filtered = useMemo(() => {
-    return complaints.filter((c) =>
-      c.title.toLowerCase().includes(search.toLowerCase()),
-    );
-  }, [complaints, search]);
+    let list = complaints;
+
+    if (filter === "ACTIVE") {
+      list = list.filter((c) => c.status === "OPEN");
+    }
+
+    if (filter === "RESOLVED") {
+      list = list.filter((c) => c.status === "RESOLVED");
+    }
+
+    if (filter === "CLOSED") {
+      list = list.filter((c) => c.status === "CLOSED");
+    }
+
+    if (search) {
+      list = list.filter((c) =>
+        c.title.toLowerCase().includes(search.toLowerCase()),
+      );
+    }
+
+    return list;
+  }, [complaints, search, filter]);
 
   const stats = {
     total: complaints.length,
@@ -69,7 +87,7 @@ export default function StudentDashboard() {
       <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Top navbar-like strip */}
+        {/* Top strip */}
         <motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -97,7 +115,7 @@ export default function StudentDashboard() {
           </div>
         </motion.div>
 
-        {/* Hero section with mouse-follow spotlight */}
+        {/* Hero section */}
         <motion.div
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
@@ -119,25 +137,25 @@ export default function StudentDashboard() {
             }}
           />
 
-          <div className="relative grid grid-cols-1 lg:grid-cols-3 gap-8 p-8 sm:p-10">
+          <div className="relative grid grid-cols-1 gap-8 p-8 sm:p-10 lg:grid-cols-3">
             <div className="lg:col-span-2">
-              <h1 className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight leading-tight">
+              <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-5xl xl:text-6xl">
                 Welcome back,{" "}
-                <span className="bg-gradient-to-r from-white via-indigo-200 to-blue-300 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-indigo-200 to-blue-300 bg-clip-text text-transparent">
                   {user?.profile?.name || "Student"}
                 </span>
               </h1>
 
-              <p className="mt-5 max-w-2xl text-base sm:text-lg leading-8 text-slate-300">
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
                 Monitor your grievances, check live progress, and submit new
                 complaints through a modern and intelligent complaint management
                 workspace.
               </p>
 
-              <div className="mt-8 flex flex-col sm:flex-row gap-4">
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <Button
                   onClick={() => navigate("/submit")}
-                  className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-6 text-white font-semibold shadow-lg shadow-indigo-500/30 hover:scale-[1.02] transition-all"
+                  className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-6 font-semibold text-white shadow-lg shadow-indigo-500/30 transition-all hover:scale-[1.02]"
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Submit New Complaint
@@ -156,29 +174,29 @@ export default function StudentDashboard() {
 
             <div className="flex flex-col justify-between gap-4">
               <div className="rounded-2xl border border-white/10 bg-white/8 p-5 backdrop-blur-xl">
-                <p className="text-sm text-slate-400 mb-2">Quick Summary</p>
+                <p className="mb-2 text-sm text-slate-400">Quick Summary</p>
                 <h3 className="text-3xl font-bold text-white">{stats.total}</h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="mt-1 text-sm text-slate-300">
                   Total complaints submitted
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/15 to-cyan-500/10 p-5 backdrop-blur-xl">
-                <p className="text-sm text-emerald-300 mb-2">Resolved Rate</p>
+                <p className="mb-2 text-sm text-emerald-300">Resolved Rate</p>
                 <h3 className="text-3xl font-bold text-white">
                   {stats.total > 0
                     ? `${Math.round((stats.resolved / stats.total) * 100)}%`
                     : "0%"}
                 </h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="mt-1 text-sm text-slate-300">
                   Based on completed grievances
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/8 p-5 backdrop-blur-xl">
-                <p className="text-sm text-slate-400 mb-2">Active Right Now</p>
+                <p className="mb-2 text-sm text-slate-400">Active Right Now</p>
                 <h3 className="text-3xl font-bold text-white">{stats.active}</h3>
-                <p className="text-sm text-slate-300 mt-1">
+                <p className="mt-1 text-sm text-slate-300">
                   Complaints currently in progress
                 </p>
               </div>
@@ -186,56 +204,104 @@ export default function StudentDashboard() {
           </div>
         </motion.div>
 
-        {/* Stats */}
+        {/* Premium Stats */}
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8"
+          className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4"
         >
-          <div className="rounded-3xl border border-white/10 bg-white/8 backdrop-blur-xl p-1 hover:-translate-y-1 transition-all duration-300">
-            <StatsCard
-              title="Total Complaints"
-              value={stats.total}
-              icon={Layers}
-            />
+          <div className="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/8 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-blue-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-300">
+                  Total Complaints
+                </p>
+                <h3 className="mt-3 text-3xl font-bold text-white">
+                  {stats.total}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400">
+                  All complaints submitted
+                </p>
+              </div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-blue-500 shadow-lg shadow-indigo-500/30">
+                <Layers className="h-6 w-6 text-white" />
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/8 backdrop-blur-xl p-1 hover:-translate-y-1 transition-all duration-300">
-            <StatsCard
-              title="Active Complaints"
-              value={stats.active}
-              icon={Activity}
-            />
+          <div className="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/8 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-cyan-500/20">
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-blue-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-300">
+                  Active Complaints
+                </p>
+                <h3 className="mt-3 text-3xl font-bold text-white">
+                  {stats.active}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400">
+                  Currently under process
+                </p>
+              </div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-500 shadow-lg shadow-cyan-500/30">
+                <Activity className="h-6 w-6 text-white" />
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/8 backdrop-blur-xl p-1 hover:-translate-y-1 transition-all duration-300">
-            <StatsCard
-              title="Resolved Complaints"
-              value={stats.resolved}
-              icon={BadgeCheck}
-            />
+          <div className="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/8 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-500/20">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-green-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-300">
+                  Resolved Complaints
+                </p>
+                <h3 className="mt-3 text-3xl font-bold text-white">
+                  {stats.resolved}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400">
+                  Successfully resolved
+                </p>
+              </div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-green-500 to-teal-500 shadow-lg shadow-emerald-500/30">
+                <BadgeCheck className="h-6 w-6 text-white" />
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/8 backdrop-blur-xl p-1 hover:-translate-y-1 transition-all duration-300">
-            <StatsCard
-              title="Closed Complaints"
-              value={stats.closed}
-              icon={Lock}
-            />
+          <div className="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/8 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-rose-500/20">
+            <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 via-transparent to-pink-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-300">
+                  Closed Complaints
+                </p>
+                <h3 className="mt-3 text-3xl font-bold text-white">
+                  {stats.closed}
+                </h3>
+                <p className="mt-2 text-xs text-slate-400">
+                  Finalized and closed
+                </p>
+              </div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-400 via-pink-500 to-red-500 shadow-lg shadow-rose-500/30">
+                <Lock className="h-6 w-6 text-white" />
+              </div>
+            </div>
           </div>
         </motion.div>
 
-        {/* Search and info panel */}
+        {/* Search + submit */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="mb-8 rounded-[1.75rem] border border-white/10 bg-white/8 backdrop-blur-2xl shadow-xl"
+          className="mb-5 rounded-[1.75rem] border border-white/10 bg-white/8 p-5 shadow-xl backdrop-blur-2xl sm:p-6"
         >
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 p-5 sm:p-6">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 placeholder="Search complaints by title..."
                 className="h-12 rounded-2xl border-white/10 bg-slate-900/40 pl-11 text-white placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-indigo-500"
@@ -244,54 +310,98 @@ export default function StudentDashboard() {
               />
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-white/10 bg-slate-900/30 px-4 py-3">
-                <p className="text-xs uppercase tracking-wider text-slate-400">
-                  Results
-                </p>
-                <p className="text-lg font-bold text-white">
-                  {filtered.length}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-slate-900/30 px-4 py-3">
-                <p className="text-xs uppercase tracking-wider text-slate-400">
-                  Search
-                </p>
-                <p className="text-sm font-medium text-slate-200">
-                  {search ? "Active" : "All complaints"}
-                </p>
-              </div>
-            </div>
+            <Button
+              onClick={() => navigate("/submit")}
+              className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-6 font-semibold text-white shadow-lg shadow-indigo-500/30 transition-all hover:scale-[1.02]"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Submit New Complaint
+            </Button>
           </div>
         </motion.div>
 
-        {/* Complaints section */}
+        {/* Filter tabs */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.85 }}
+          className="mb-8 flex flex-wrap gap-3"
+        >
+          <button
+            onClick={() => setFilter("ALL")}
+            className={`rounded-xl px-5 py-2 text-sm font-medium transition ${
+              filter === "ALL"
+                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30"
+                : "bg-white/5 text-slate-300 hover:bg-white/10"
+            }`}
+          >
+            All
+          </button>
+
+          <button
+            onClick={() => setFilter("ACTIVE")}
+            className={`rounded-xl px-5 py-2 text-sm font-medium transition ${
+              filter === "ACTIVE"
+                ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
+                : "bg-white/5 text-slate-300 hover:bg-white/10"
+            }`}
+          >
+            Active
+          </button>
+
+          <button
+            onClick={() => setFilter("RESOLVED")}
+            className={`rounded-xl px-5 py-2 text-sm font-medium transition ${
+              filter === "RESOLVED"
+                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+                : "bg-white/5 text-slate-300 hover:bg-white/10"
+            }`}
+          >
+            Resolved
+          </button>
+
+          <button
+            onClick={() => setFilter("CLOSED")}
+            className={`rounded-xl px-5 py-2 text-sm font-medium transition ${
+              filter === "CLOSED"
+                ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30"
+                : "bg-white/5 text-slate-300 hover:bg-white/10"
+            }`}
+          >
+            Closed
+          </button>
+        </motion.div>
+
+        {/* Complaints */}
         <motion.div
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9 }}
         >
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-white sm:text-3xl">
                 Your Complaints
               </h2>
               <p className="mt-2 text-slate-400">
                 Explore complaint history, status updates, and detailed records.
               </p>
             </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              Showing <span className="font-semibold text-white">{filtered.length}</span>{" "}
+              complaint{filtered.length !== 1 ? "s" : ""}
+            </div>
           </div>
 
           {filtered.length > 0 ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {filtered.map((c, index) => (
                 <motion.div
                   key={c.complaintId}
                   initial={{ opacity: 0, y: 22 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="group rounded-[1.75rem] border border-white/10 bg-white/8 p-1 backdrop-blur-xl shadow-lg hover:-translate-y-1 hover:shadow-2xl transition-all duration-300"
                 >
                   <ComplaintCard
                     complaint={c}
@@ -301,23 +411,23 @@ export default function StudentDashboard() {
               ))}
             </div>
           ) : (
-            <div className="rounded-[2rem] border border-dashed border-white/15 bg-white/6 backdrop-blur-xl p-12 text-center">
+            <div className="rounded-[2rem] border border-dashed border-white/15 bg-white/6 p-12 text-center backdrop-blur-xl">
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-white/10">
                 <FileText className="h-8 w-8 text-slate-300" />
               </div>
 
-              <h3 className="text-2xl font-bold text-white mb-3">
+              <h3 className="mb-3 text-2xl font-bold text-white">
                 No complaints found
               </h3>
 
-              <p className="max-w-xl mx-auto text-slate-400 leading-7 mb-8">
-                There are no complaints matching your current search. Try a
-                different title keyword or submit a new grievance to get started.
+              <p className="mx-auto mb-8 max-w-xl leading-7 text-slate-400">
+                There are no complaints matching your current search or filter.
+                Try another keyword or submit a new grievance to get started.
               </p>
 
               <Button
                 onClick={() => navigate("/submit")}
-                className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-6 font-semibold hover:scale-[1.02] transition-all"
+                className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-6 font-semibold transition-all hover:scale-[1.02]"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Submit Complaint

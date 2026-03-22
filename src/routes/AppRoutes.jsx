@@ -6,6 +6,7 @@ import SubmitComplaint from "@/pages/SubmitComplaint";
 import ComplaintDetails from "@/pages/ComplaintDetails";
 import ProtectedRoute from "./ProtectedRoute";
 import StudentDashboard from "@/pages/StudentDashboard";
+import StaffDashboard from "@/pages/StaffDashboard";
 
 export default function AppRoutes() {
   return (
@@ -14,7 +15,7 @@ export default function AppRoutes() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signin" element={<SignIn />} />
-
+        
         <Route
           path="/student-dashboard"
           element={
@@ -38,6 +39,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute>
               <ComplaintDetails />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/staff-dashboard"
+          element={
+            <ProtectedRoute role="STAFF">
+              <StaffDashboard />
             </ProtectedRoute>
           }
         />

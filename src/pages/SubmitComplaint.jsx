@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api } from "@/services/api";
 import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,9 @@ import {
   Loader2,
   CheckCircle2,
   ArrowLeft,
+  BrainCircuit,
+  AlertTriangle,
+  Stars,
 } from "lucide-react";
 
 import { motion } from "framer-motion";
@@ -35,6 +39,22 @@ export default function SubmitComplaint() {
   const [mlPrediction, setMlPrediction] = useState(null);
   const [predicting, setPredicting] = useState(false);
 
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await api.get("/complaint-categories");
+        setCategories(res.data);
+      } catch (err) {
+        console.error("Failed to load categories", err);
+      }
+    };
+
+    loadCategories();
+  }, []);
+
   const predictCategory = async () => {
     if (!form.title || !form.description) return;
 
@@ -51,6 +71,15 @@ export default function SubmitComplaint() {
         predictedPriority: res.data.predicted_priority,
         confidence: res.data.confidence,
       });
+
+      const match = categories.find(
+        (c) =>
+          c.name.toLowerCase() === prediction.predictedDepartment.toLowerCase(),
+      );
+
+      if (match) {
+        setSelectedCategory(match.categoryId);
+      }
     } catch (err) {
       console.error("ML prediction error:", err);
     }
@@ -68,7 +97,7 @@ export default function SubmitComplaint() {
       const complaintData = {
         title: form.title,
         description: form.description,
-        category: (mlPrediction?.predictedDepartment || "GENERAL").toUpperCase(),
+        categoryId: selectedCategory,
         priority: (mlPrediction?.predictedPriority || "LOW").toUpperCase(),
       };
 
@@ -106,63 +135,88 @@ export default function SubmitComplaint() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white overflow-hidden relative">
-      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950" />
-      <div className="absolute top-0 left-0 -z-10 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
-      <div className="absolute bottom-0 right-0 -z-10 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
+  const getPriorityStyles = (priority) => {
+    switch ((priority || "").toUpperCase()) {
+      case "HIGH":
+        return "bg-red-500/15 text-red-300 border border-red-400/20";
+      case "MEDIUM":
+        return "bg-yellow-500/15 text-yellow-300 border border-yellow-400/20";
+      case "LOW":
+        return "bg-cyan-500/15 text-cyan-300 border border-cyan-400/20";
+      default:
+        return "bg-indigo-500/15 text-indigo-300 border border-indigo-400/20";
+    }
+  };
 
-      <div className="max-w-3xl mx-auto px-4 py-10">
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      {/* Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.14),transparent_30%),linear-gradient(to_bottom_right,#020617,#0f172a,#111827)]" />
+      <div className="absolute -top-28 -left-24 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl animate-pulse" />
+      <div className="absolute top-1/3 -right-20 h-[26rem] w-[26rem] rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
+      <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
+
+      <div className="relative z-10 mx-auto max-w-4xl px-4 py-8">
+        {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
+          className="mb-8 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl shadow-2xl"
         >
-          <div className="mb-6">
-            <button
-              onClick={() => navigate("/student-dashboard")}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 backdrop-blur-xl hover:bg-white/10 transition"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </button>
+          <div>
+            <h2 className="text-lg font-semibold text-white">
+              Submit Complaint
+            </h2>
+            <p className="text-xs text-slate-300">
+              Smart grievance submission with AI routing
+            </p>
           </div>
 
-          <Card className="border border-white/10 bg-white/10 backdrop-blur-xl shadow-xl rounded-3xl overflow-hidden text-white">
-            <CardHeader className="bg-gradient-to-r from-indigo-500 to-blue-500 p-8">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
-                  <FileText className="w-7 h-7 text-white" />
-                </div>
+          <button
+            onClick={() => navigate("/student-dashboard")}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+        </motion.div>
 
-                <div>
-                  <CardTitle className="text-2xl font-bold text-white">
-                    Submit a Complaint
-                  </CardTitle>
-
-                  <p className="text-indigo-100 text-sm mt-1">
-                    Describe your issue and we will route it to the right team
-                  </p>
-                </div>
-              </div>
+        <motion.div
+          initial={{ opacity: 0, y: 26 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[2rem] border border-white/10 bg-white/8 backdrop-blur-2xl shadow-xl"
+        >
+          <Card className="border-0 bg-transparent text-white shadow-none">
+            <CardHeader className="border-b border-white/10 p-8 ">
+              <CardTitle className="text-3xl font-bold">
+                Submit a Complaint
+              </CardTitle>
+              <p className="text-sm text-slate-300">
+                Describe your issue clearly so the right team can help you.
+              </p>
             </CardHeader>
 
-            <CardContent className="p-8 space-y-6">
+            <CardContent className="p-8">
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Title */}
                 <div className="space-y-2">
-                  <Label className="font-medium text-slate-200">
+                  <Label className="text-slate-200/font-bold ">
                     Complaint Title *
                   </Label>
 
                   <Input
                     placeholder="Example: Fan not working"
                     value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    className="rounded-xl h-12 border-white/10 bg-white/5 text-white placeholder:text-slate-400"
+                    onChange={(e) =>
+                      setForm({ ...form, title: e.target.value })
+                    }
+                    className="h-12 rounded-xl border-white/10 bg-slate-900/40 text-white"
                   />
                 </div>
 
+                {/* Description */}
                 <div className="space-y-2">
-                  <Label className="font-medium text-slate-200">
+                  <Label className="text-slate-200/font-bold">
                     Detailed Description *
                   </Label>
 
@@ -172,64 +226,109 @@ export default function SubmitComplaint() {
                     onChange={(e) =>
                       setForm({ ...form, description: e.target.value })
                     }
-                    className="rounded-xl min-h-[130px] border-white/10 bg-white/5 text-white placeholder:text-slate-400"
+                    className="min-h-[140px] rounded-xl border-white/10 bg-slate-900/40 text-white"
                   />
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={predictCategory}
-                  disabled={predicting}
-                  className="w-full rounded-xl h-12 border-white/10 bg-white/5 text-indigo-200 hover:bg-white/10 hover:text-white"
-                >
-                  {predicting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Auto-classify with AI
-                    </>
-                  )}
-                </Button>
+                {/* AI Auto Classify */}
+                <div className="rounded-2xl border border-indigo-200/20 bg-gradient-to-br from-indigo-300/15 via-blue-500/10 to-cyan-500/10 p-5 shadow-lg shadow-indigo-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-blue-500 to-cyan-500">
+                        <Sparkles className="w-5 h-5 text-white animate-pulse" />
+                      </div>
 
-                {mlPrediction && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="bg-indigo-500/10 border border-indigo-400/20 rounded-2xl p-4"
-                  >
-                    <div className="flex items-center mb-2 gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-indigo-300" />
-
-                      <span className="font-semibold text-indigo-200 text-sm">
-                        AI Prediction
-                      </span>
-
-                      <span className="text-xs text-indigo-300 ml-auto">
-                        {Math.round((mlPrediction.confidence || 0.8) * 100)}%
-                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-indigo-100">
+                          AI Auto Classification
+                        </p>
+                        <p className="text-xs text-slate-300">
+                          Predict category and priority automatically
+                        </p>
+                      </div>
                     </div>
 
-                    <p className="text-sm text-slate-200">
-                      Category:
-                      <b className="uppercase ml-1">
-                        {mlPrediction.predictedDepartment}
-                      </b>
-                      <br />
-                      Priority:
-                      <b className="capitalize ml-1">
-                        {mlPrediction.predictedPriority}
-                      </b>
-                    </p>
-                  </motion.div>
-                )}
+                    <span className="text-xs bg-cyan-500/20 text-cyan-300 px-3 py-1 rounded-full">
+                      AI Powered
+                    </span>
+                  </div>
 
+                  <Button
+                    type="button"
+                    onClick={predictCategory}
+                    disabled={predicting}
+                    className="h-14 w-full rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 font-semibold text-white"
+                  >
+                    {predicting ? (
+                      <>
+                        <Loader2 className="mr-2 w-5 h-5 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 w-5 h-5 animate-pulse" />
+                        Auto-Classify with AI
+                      </>
+                    )}
+                  </Button>
+
+                  {mlPrediction && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="mt-4 rounded-xl border border-indigo-400/20 bg-indigo-500/10 p-4"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Stars className="w-4 h-4 text-indigo-300" />
+                        <span className="text-sm font-semibold text-indigo-200">
+                          AI Prediction
+                        </span>
+                        <span className="ml-auto text-xs text-indigo-300">
+                          {Math.round((mlPrediction.confidence || 0.8) * 100)}%
+                        </span>
+                      </div>
+
+                      <p className="text-sm text-slate-200">
+                        Category:
+                        <b className="ml-1 uppercase">
+                          {mlPrediction.predictedDepartment}
+                        </b>
+                        <br />
+                        Priority:
+                        <b
+                          className={`ml-1 px-2 py-1 rounded ${getPriorityStyles(
+                            mlPrediction.predictedPriority,
+                          )}`}
+                        >
+                          {mlPrediction.predictedPriority}
+                        </b>
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label className="font-medium text-slate-200">
+                    Category *
+                  </Label>
+
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full h-12 rounded-xl border border-white/10 bg-white/5 text-white px-3"
+                  >
+                    <option value="">Select category</option>
+
+                    {categories.map((c) => (
+                      <option key={c.categoryId} value={c.categoryId}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Upload */}
+                <div className="space-y-2">
+                  <Label className="text-slate-200">
                     Evidence / Attachments
                   </Label>
 
@@ -274,10 +373,11 @@ export default function SubmitComplaint() {
                   )}
                 </div>
 
+                {/* Submit */}
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="w-full h-14 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 text-white font-semibold shadow-lg hover:scale-[1.02] transition"
+                  className="w-full h-14 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 font-semibold text-white shadow-lg hover:scale-[1.02]"
                 >
                   {submitting ? (
                     <>
