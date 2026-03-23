@@ -23,6 +23,8 @@ public interface ComplaintService {
 
     List<ComplaintResponse> getMyComplaints();
 
+    List<ComplaintResponse> getAssignedComplaints();
+
     ComplaintResponse updateStatus(Long id, ComplaintAction action, ActionRequest req);
 
     ComplaintResponse escalateComplaint(Long id, ActionRequest req);

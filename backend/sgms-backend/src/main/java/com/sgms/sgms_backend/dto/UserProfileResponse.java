@@ -18,5 +18,6 @@ public class UserProfileResponse {
 
     private String role;
 
-    private Object profile;
+    private StaffProfileDTO staff;
+    private StudentProfileDTO student;
 }

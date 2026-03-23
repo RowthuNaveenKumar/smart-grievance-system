@@ -26,12 +26,13 @@ public class JwtUtil {
 
     }
 
-    public String generateToken(String email,String role,String userType){
+    public String generateToken(String email,String role,String subRole,String userType){
 
         return Jwts.builder()
                 .setSubject(email)
-                .claim("role",role)
-                .claim("userType",userType)
+                .claim("role", role)          // STAFF
+                .claim("subRole", subRole)    // WARDEN
+                .claim("userType", userType)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis()+EXPIRATION))
                 .signWith(getKey())

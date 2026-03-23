@@ -30,35 +30,39 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponse login(LoginRequest req){
 
-        User user=userRepo.findByEmail(req.getEmail())
-                .orElseThrow(()->new RuntimeException("User not found"));
+        User user = userRepo.findByEmail(req.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if(!passwordEncoder.matches(req.getPassword(),user.getPassword())){
+        if(!passwordEncoder.matches(req.getPassword(), user.getPassword())){
             throw new RuntimeException("Invalid credentials");
         }
 
-        String role="STUDENT";
+        // System role (for Spring Security)
+        String role = user.getAccountType().name();   // STUDENT or STAFF
 
-        if(user.getAccountType()==AccountType.STAFF){
+        // Business role (for workflow)
+        String subRole = null;
 
-            StaffInfo staff=staffRepo.findByUser_UserId(user.getUserId())
-                    .orElseThrow(()->new RuntimeException("Staff not found"));
+        if(user.getAccountType() == AccountType.STAFF){
 
-            role=staff.getRoles()
+            StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
+                    .orElseThrow(() -> new RuntimeException("Staff not found"));
+
+            subRole = staff.getRoles()
                     .stream()
                     .map(Role::getRoleName)
                     .findFirst()
-                    .orElseThrow(()->new RuntimeException("Role missing"));
-
+                    .orElse(null);
         }
 
-        String token=jwtUtil.generateToken(
+        String token = jwtUtil.generateToken(
                 user.getEmail(),
-                role,
+                role,      // STAFF
+                subRole,   // WARDEN
                 user.getAccountType().name()
         );
 
-        return new AuthResponse(token,role,user.getAccountType().name());
+        return new AuthResponse(token, role, user.getAccountType().name());
     }
 
     @Override

@@ -48,39 +48,49 @@ public class AuthController {
 
         String email = auth.getName();
 
-        User user = userRepository.findByEmail(email).orElseThrow(() ->
-                new RuntimeException("User not found"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        Object profile = null;
         String role = null;
+        StaffProfileDTO staffDTO = null;
+        StudentProfileDTO studentDTO = null;
 
         if (user.getAccountType() == AccountType.STUDENT) {
 
             StudentInfo student = studentRepo.findByUser_UserId(user.getUserId())
-                    .orElse(null);
+                    .orElseThrow(() -> new RuntimeException("Student not found"));
 
-            profile = student;
+            studentDTO = new StudentProfileDTO(
+                    student.getStudentId(),
+                    student.getName(),
+                    student.getEnrollmentNo()
+            );
 
         } else {
 
-            StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId()).orElse(null);
+            StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
+                    .orElseThrow(() -> new RuntimeException("Staff not found"));
 
-            profile = staff;
-
-            if (staff != null && !staff.getRoles().isEmpty()) {
+            if (!staff.getRoles().isEmpty()) {
                 role = staff.getRoles().iterator().next().getRoleName();
             }
+
+            staffDTO = new StaffProfileDTO(
+                    staff.getStaffId(),
+                    staff.getName(),
+                    staff.getPhone()
+            );
         }
 
         return ResponseEntity.ok(
-
-                new UserProfileResponse(user.getUserId(),
+                new UserProfileResponse(
+                        user.getUserId(),
                         user.getEmail(),
                         user.getAccountType(),
                         role,
-                        profile)
-
+                        staffDTO,
+                        studentDTO
+                )
         );
     }
-
 }

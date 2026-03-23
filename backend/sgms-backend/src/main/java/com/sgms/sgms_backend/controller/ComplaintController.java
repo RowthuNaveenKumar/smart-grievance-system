@@ -47,6 +47,15 @@ public class ComplaintController {
         return complaintService.createComplaint(request, files);
     }
 
+    /* =========================================
+       GET STAFF ASSIGNED COMPLAINT
+    ========================================= */
+
+    @GetMapping("/assigned")
+    @PreAuthorize("hasAnyRole('STAFF','ADMIN')")
+    public List<ComplaintResponse> getAssignedComplaints() {
+        return complaintService.getAssignedComplaints();
+    }
 
     /* =========================================
        STAFF UPDATE STATUS

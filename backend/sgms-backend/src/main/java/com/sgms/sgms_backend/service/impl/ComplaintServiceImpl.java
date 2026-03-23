@@ -35,6 +35,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final StaffInfoRepository staffRepo;
     private final ComplaintRepository complaintRepo;
     private final ComplaintCategoryRepository categoryRepo;
+    private final ComplaintUpdateRepository updateRepo;
 
     private final ComplaintAssignmentService assignmentService;
     private final ComplaintWorkflowService workflowService;
@@ -46,7 +47,7 @@ public class ComplaintServiceImpl implements ComplaintService {
             UserRepository userRepo,
             StudentInfoRepository studentRepo,
             StaffInfoRepository staffRepo,
-            ComplaintRepository complaintRepo, ComplaintCategoryRepository categoryRepo,
+            ComplaintRepository complaintRepo, ComplaintCategoryRepository categoryRepo, ComplaintUpdateRepository updateRepo,
             ComplaintAssignmentService assignmentService,
             ComplaintWorkflowService workflowService,
             ComplaintFileService fileService,
@@ -57,6 +58,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         this.staffRepo = staffRepo;
         this.complaintRepo = complaintRepo;
         this.categoryRepo = categoryRepo;
+        this.updateRepo = updateRepo;
         this.assignmentService = assignmentService;
         this.workflowService = workflowService;
         this.fileService = fileService;
@@ -109,7 +111,6 @@ public class ComplaintServiceImpl implements ComplaintService {
         complaint.setCategory(category);
         complaint.setPriority(priority);
         complaint.setStatus(ComplaintStatus.OPEN);
-//        complaint.setEscalationLevel(1);
         complaint.setCurrentLevel(1);
 
         Department department = category.getDepartment();
@@ -120,7 +121,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         complaint.setWorkflow(workflow);
 
         StaffInfo assignedStaff =
-                assignmentService.assignStaff(department, 1);
+                assignmentService.assignStaff(complaint, 1);
 
         complaint.setDepartment(department);
         complaint.setAssignedTo(assignedStaff);
@@ -138,29 +139,6 @@ public class ComplaintServiceImpl implements ComplaintService {
         );
 
         return getComplaintById(complaint.getComplaintId());
-
-//        if (mlResponse != null) {
-//            complaint.setMlPredictedCategory(mlResponse.getPredictedDepartment());
-//            complaint.setMlPredictedPriority(mlResponse.getPredictedPriority());
-//            complaint.setMlConfidence(java.math.BigDecimal.valueOf(mlResponse.getConfidence()));
-//        }
-//
-//        StaffInfo assignedStaff = autoAssign(category);
-//        complaint.setAssignedTo(assignedStaff);
-//
-//        complaint = complaintRepo.save(complaint);
-//
-//        List<String> fileUrls = saveFiles(files, complaint);
-//
-//        createTimeline(
-//                complaint,
-//                ComplaintAction.SUBMITTED.name(),
-//                null,
-//                ComplaintStatus.OPEN,
-//                null
-//        );
-//
-//        return buildResponse(complaint, fileUrls);
     }
 
     /* =========================================
@@ -287,28 +265,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Complaint not found"));
 
-        return ComplaintResponse.builder()
-                .complaintId(complaint.getComplaintId())
-                .title(complaint.getTitle())
-                .description(complaint.getDescription())
-                .category(complaint.getCategory().getName())
-                .priority(complaint.getPriority().name())
-                .status(complaint.getStatus().name())
-                .assignedTo(
-                        complaint.getAssignedTo() != null ?
-                                complaint.getAssignedTo().getName() : null
-                )
-                .createdAt(complaint.getCreatedAt())
-                .build();
-
-
-//        List<String> files =
-//                fileRepo.findByComplaintComplaintId(id)
-//                        .stream()
-//                        .map(ComplaintFile::getFileUrl)
-//                        .toList();
-//
-//        return buildResponse(complaint, files);
+        return mapToResponse(complaint);
     }
 
     /* =========================================
@@ -323,21 +280,40 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .map(this::mapToResponse)
                 .toList();
     }
+    /* =========================================
+       GET STAFF ASSIGNED COMPLAINTS
+    ========================================= */
+    @Override
+    public List<ComplaintResponse> getAssignedComplaints() {
 
+        String email = getCurrentUserEmail();
+
+        User user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
+                .orElseThrow(() -> new RuntimeException("Staff not found"));
+
+        return complaintRepo
+                .findByAssignedToStaffId(staff.getStaffId())
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
     /* =========================================
        CATEGORY + PRIORITY HELPERS
     ========================================= */
 
     private ComplaintCategory determineCategory(
             ComplaintRequest req,
-            MLResponse ml){
+            MLResponse ml) {
 
-        if(req.getCategoryId()!=null){
+        if (req.getCategoryId() != null) {
             return categoryRepo.findById(req.getCategoryId())
                     .orElseThrow(() -> new RuntimeException("Category not found"));
         }
 
-        if(ml!=null && ml.getPredictedDepartment()!=null){
+        if (ml != null && ml.getPredictedDepartment() != null) {
             return categoryRepo
                     .findByName(ml.getPredictedDepartment())
                     .orElse(null);
@@ -367,6 +343,9 @@ public class ComplaintServiceImpl implements ComplaintService {
         return Priority.LOW;
     }
 
+    /* =========================================
+           STUDENT FEEDBACK
+        ========================================= */
 
     @Override
     public ComplaintResponse studentFeedback(Long id, boolean accepted) {
@@ -428,6 +407,27 @@ public class ComplaintServiceImpl implements ComplaintService {
 
     private ComplaintResponse mapToResponse(Complaint complaint) {
 
+        List<TimelineResponse> timeline =
+                updateRepo
+                        .findByComplaintComplaintIdOrderByCreatedAtAsc(
+                                complaint.getComplaintId())
+                        .stream()
+                        .map(u -> TimelineResponse.builder()
+                                .action(u.getAction())
+                                .fromStatus(
+                                        u.getFromStatus() != null ?
+                                                u.getFromStatus().name() : null)
+                                .toStatus(
+                                        u.getToStatus() != null ?
+                                                u.getToStatus().name() : null)
+                                .performedBy(
+                                        u.getPerformedBy() != null ?
+                                                u.getPerformedBy().getName() :
+                                                "SYSTEM")
+                                .createdAt(u.getCreatedAt())
+                                .build())
+                        .toList();
+
         return ComplaintResponse.builder()
                 .complaintId(complaint.getComplaintId())
                 .title(complaint.getTitle())
@@ -436,11 +436,11 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .priority(complaint.getPriority().name())
                 .status(complaint.getStatus().name())
                 .assignedTo(
-                        complaint.getAssignedTo() != null
-                                ? complaint.getAssignedTo().getName()
-                                : null
+                        complaint.getAssignedTo() != null ?
+                                complaint.getAssignedTo().getName() : null
                 )
                 .createdAt(complaint.getCreatedAt())
+                .timeline(timeline)
                 .build();
     }
 }
