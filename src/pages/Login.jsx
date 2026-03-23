@@ -23,9 +23,12 @@ import {
   Building2,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useUser } from "@/context/UserContext";
 
 export default function Login() {
   const navigate = useNavigate();
+
+  const { loadUser } = useUser();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,15 +48,17 @@ export default function Login() {
         password,
       });
 
-      const { token, role, userType } = res.data;
+      const { token } = res.data;
 
       localStorage.setItem("token", token);
-      localStorage.setItem("role", role);
-      localStorage.setItem("userType", userType);
 
-      if (userType === "STUDENT") {
+      await loadUser();
+
+      const user=JSON.parse(localStorage.getItem("user"));
+
+      if (user.accountType === "STUDENT") {
         navigate("/student-dashboard");
-      } else if (role === "ADMIN") {
+      } else if (user.role === "ADMIN") {
         navigate("/admin-dashboard");
       } else {
         navigate("/staff-dashboard");
@@ -137,9 +142,7 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-slate-200 font-medium">
-                    Password
-                  </Label>
+                  <Label className="text-slate-200 font-medium">Password</Label>
 
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />

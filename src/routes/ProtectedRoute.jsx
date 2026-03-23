@@ -1,25 +1,27 @@
 import { Navigate } from "react-router-dom";
+import { useUser } from "@/context/UserContext";
 
 const ProtectedRoute = ({ children, role }) => {
-  const userRole = localStorage.getItem("role");
-  const userType = localStorage.getItem("userType");
+  const { user, loading } = useUser();
 
-  if (!userRole && !userType) {
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
     return <Navigate to="/login" />;
   }
 
-  if (role) {
-    if (role === "STAFF" && userType !== "STAFF") {
-      return <Navigate to="/unauthorized" />;
-    }
+  if (role === "STUDENT" && user.accountType !== "STUDENT") {
+    return <Navigate to="/unauthorized" />;
+  }
 
-    if (role === "STUDENT" && userType !== "STUDENT") {
-      return <Navigate to="/unauthorized" />;
-    }
+  if (role === "STAFF" && user.accountType !== "STAFF") {
+    return <Navigate to="/unauthorized" />;
+  }
 
-    if (role === "ADMIN" && userRole !== "ADMIN") {
-      return <Navigate to="/unauthorized" />;
-    }
+  if (role === "ADMIN" && user.role !== "ADMIN") {
+    return <Navigate to="/unauthorized" />;
   }
 
   return children;

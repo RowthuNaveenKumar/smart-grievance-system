@@ -20,9 +20,10 @@ import {
 } from "lucide-react";
 
 import { motion } from "framer-motion";
+import { useUser } from "@/context/UserContext";
 
 export default function StudentDashboard() {
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [complaints, setComplaints] = useState([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
@@ -36,9 +37,6 @@ export default function StudentDashboard() {
 
   const loadData = async () => {
     try {
-      const me = await api.get("/auth/me");
-      setUser(me.data);
-
       const res = await api.get("/complaints/my");
       setComplaints(res.data);
     } catch (err) {
@@ -142,7 +140,7 @@ export default function StudentDashboard() {
               <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-5xl xl:text-6xl">
                 Welcome back,{" "}
                 <span className="bg-gradient-to-r from-indigo-200 to-blue-300 bg-clip-text text-transparent">
-                  {user?.profile?.name || "Student"}
+                  {user?.student?.name || "Student"}
                 </span>
               </h1>
 
@@ -195,7 +193,9 @@ export default function StudentDashboard() {
 
               <div className="rounded-2xl border border-white/10 bg-white/8 p-5 backdrop-blur-xl">
                 <p className="mb-2 text-sm text-slate-400">Active Right Now</p>
-                <h3 className="text-3xl font-bold text-white">{stats.active}</h3>
+                <h3 className="text-3xl font-bold text-white">
+                  {stats.active}
+                </h3>
                 <p className="mt-1 text-sm text-slate-300">
                   Complaints currently in progress
                 </p>
@@ -389,7 +389,10 @@ export default function StudentDashboard() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-              Showing <span className="font-semibold text-white">{filtered.length}</span>{" "}
+              Showing{" "}
+              <span className="font-semibold text-white">
+                {filtered.length}
+              </span>{" "}
               complaint{filtered.length !== 1 ? "s" : ""}
             </div>
           </div>
