@@ -4,6 +4,7 @@ import com.sgms.sgms_backend.dto.*;
 import com.sgms.sgms_backend.enums.ComplaintAction;
 import com.sgms.sgms_backend.service.ComplaintService;
 
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -38,7 +39,7 @@ public class ComplaintController {
     @PreAuthorize("hasRole('STUDENT')")
     public ComplaintResponse createComplaint(
 
-            @RequestPart("request") ComplaintRequest request,
+            @Valid @RequestPart("request") ComplaintRequest request,
 
             @RequestPart(value = "files", required = false)
             List<MultipartFile> files
