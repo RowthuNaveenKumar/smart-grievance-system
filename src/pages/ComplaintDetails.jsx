@@ -255,7 +255,7 @@ export default function ComplaintDetails() {
                     {complaint.files.map((file, i) => (
                       <a
                         key={i}
-                        href={file}
+                        href={`http://localhost:8080${file}`}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/30 px-4 py-4 text-indigo-200 transition hover:bg-white/10"
