@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { motion } from "framer-motion";
+import { useUser } from "@/context/UserContext";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
   const [recentComplaints, setRecentComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
 
   const navigate = useNavigate();
 
@@ -42,8 +43,6 @@ export default function AdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const me = await api.get("/auth/me");
-      setUser(me.data);
 
       const complaintsRes = await api.get("/complaints");
       const departmentsRes = await api.get("/departments");
@@ -180,7 +179,7 @@ export default function AdminDashboard() {
               <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-5xl xl:text-6xl">
                 Welcome,{" "}
                 <span className="bg-gradient-to-r from-white via-indigo-200 to-blue-300 bg-clip-text text-transparent">
-                   {user?.profile?.name || "Admin"}
+                   {user?.staff?.name || "Admin"}
                 </span>
               </h1>
 
