@@ -36,6 +36,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final ComplaintRepository complaintRepo;
     private final ComplaintCategoryRepository categoryRepo;
     private final ComplaintUpdateRepository updateRepo;
+    private final ComplaintFileRepository complaintFileRepo;
 
     private final ComplaintAssignmentService assignmentService;
     private final ComplaintWorkflowService workflowService;
@@ -47,7 +48,10 @@ public class ComplaintServiceImpl implements ComplaintService {
             UserRepository userRepo,
             StudentInfoRepository studentRepo,
             StaffInfoRepository staffRepo,
-            ComplaintRepository complaintRepo, ComplaintCategoryRepository categoryRepo, ComplaintUpdateRepository updateRepo,
+            ComplaintRepository complaintRepo,
+            ComplaintCategoryRepository categoryRepo,
+            ComplaintUpdateRepository updateRepo,
+            ComplaintFileRepository complaintFileRepo,
             ComplaintAssignmentService assignmentService,
             ComplaintWorkflowService workflowService,
             ComplaintFileService fileService,
@@ -59,6 +63,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         this.complaintRepo = complaintRepo;
         this.categoryRepo = categoryRepo;
         this.updateRepo = updateRepo;
+        this.complaintFileRepo = complaintFileRepo;
         this.assignmentService = assignmentService;
         this.workflowService = workflowService;
         this.fileService = fileService;
@@ -181,16 +186,6 @@ public class ComplaintServiceImpl implements ComplaintService {
         );
 
         return getComplaintById(id);
-
-//        createTimeline(
-//                complaint,
-//                ComplaintAction.ESCALATED.name(),
-//                ComplaintStatus.OPEN,
-//                ComplaintStatus.ESCALATED,
-//                req.getNote()
-//        );
-//
-//        return getComplaintById(id);
     }
 
     /* =========================================
@@ -256,7 +251,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     }
 
     /* =========================================
-       GET COMPLAINT
+       GET COMPLAINT TO GET COMPLAINT DETAILS
     ========================================= */
 
     @Override
@@ -280,6 +275,7 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .map(this::mapToResponse)
                 .toList();
     }
+
     /* =========================================
        GET STAFF ASSIGNED COMPLAINTS
     ========================================= */
@@ -405,7 +401,17 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .toList();
     }
 
+    /* =========================================
+       TO GET COMPLAINT DETAILS
+   ========================================= */
+
     private ComplaintResponse mapToResponse(Complaint complaint) {
+
+        List<String> files = complaintFileRepo
+                .findByComplaintComplaintId(complaint.getComplaintId())
+                .stream()
+                .map(ComplaintFile::getFileUrl)
+                .toList();
 
         List<TimelineResponse> timeline =
                 updateRepo
@@ -440,6 +446,7 @@ public class ComplaintServiceImpl implements ComplaintService {
                                 complaint.getAssignedTo().getName() : null
                 )
                 .createdAt(complaint.getCreatedAt())
+                .files(files)
                 .timeline(timeline)
                 .build();
     }

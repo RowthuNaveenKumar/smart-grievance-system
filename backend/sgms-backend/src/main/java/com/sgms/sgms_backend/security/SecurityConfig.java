@@ -17,23 +17,25 @@ public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
 
-    public SecurityConfig(JwtFilter jwtFilter){
-        this.jwtFilter=jwtFilter;
+    public SecurityConfig(JwtFilter jwtFilter) {
+        this.jwtFilter = jwtFilter;
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
                 .cors(Customizer.withDefaults())
-                .csrf(csrf->csrf.disable())
+                .csrf(csrf -> csrf.disable())
 
-                .authorizeHttpRequests(auth->auth
+                .authorizeHttpRequests(auth -> auth
+                        // allow uploaded files
+                        .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
 
-                .sessionManagement(session->
+                .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 );
 
@@ -44,7 +46,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder(){
+    public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
