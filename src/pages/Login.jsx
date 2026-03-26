@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 
 import {
-  GraduationCap,
+  ShieldCheck,
   Mail,
   Lock,
   AlertCircle,
@@ -92,7 +92,7 @@ export default function Login() {
 
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center h-16 w-16 bg-gradient-to-br from-indigo-500 via-blue-500 to-cyan-500 rounded-2xl mb-4 shadow-xl shadow-indigo-500/30">
-              <GraduationCap className="h-8 w-8 text-white" />
+              <ShieldCheck className="h-8 w-8 text-white" />
             </div>
 
             <h1 className="text-3xl font-bold text-white">Welcome Back</h1>

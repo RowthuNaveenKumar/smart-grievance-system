@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import SplashScreen from "../pages/SplashScreen";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import SignIn from "../pages/SignIn";
@@ -7,12 +8,14 @@ import ComplaintDetails from "@/pages/ComplaintDetails";
 import ProtectedRoute from "./ProtectedRoute";
 import StudentDashboard from "@/pages/StudentDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<SplashScreen />} />
+        <Route path="/home" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signin" element={<SignIn />} />
         
@@ -51,6 +54,16 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/admin-dashboard"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
       </Routes>
     </BrowserRouter>
   );

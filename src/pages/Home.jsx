@@ -25,7 +25,7 @@ export default function Home() {
           <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl px-6 py-4 shadow-2xl">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 shadow-lg shadow-indigo-500/30">
-                <GraduationCap className="h-5 w-5 text-white" />
+                <ShieldCheck className="h-5 w-5 text-white" />
               </div>
 
               <div>

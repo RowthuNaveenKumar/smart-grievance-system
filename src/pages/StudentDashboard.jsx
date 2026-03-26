@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 
@@ -16,7 +16,7 @@ import {
   Search,
   ArrowRight,
   FileText,
-  GraduationCap,
+  ShieldCheck,
 } from "lucide-react";
 
 import { motion } from "framer-motion";
@@ -29,6 +29,7 @@ export default function StudentDashboard() {
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
 
   const navigate = useNavigate();
+  const complaintsSectionRef = useRef(null);
 
   useEffect(() => {
     loadData();
@@ -96,7 +97,7 @@ export default function StudentDashboard() {
         >
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 shadow-lg shadow-indigo-500/30">
-              <GraduationCap className="h-5 w-5 text-white" />
+              <ShieldCheck className="h-5 w-5 text-white" />
             </div>
 
             <div>
@@ -104,7 +105,7 @@ export default function StudentDashboard() {
                 SmartGriev
               </h2>
               <p className="text-xs text-slate-300">
-                Premium student grievance workspace
+                Student grievance workspace
               </p>
             </div>
           </div>
@@ -163,7 +164,12 @@ export default function StudentDashboard() {
 
                 <Button
                   variant="outline"
-                  onClick={() => navigate("/my-complaints")}
+                  onClick={() => 
+                    complaintsSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
                   className="h-12 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10"
                 >
                   View All Complaints
@@ -374,6 +380,7 @@ export default function StudentDashboard() {
 
         {/* Complaints */}
         <motion.div
+          ref={complaintsSectionRef}
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9 }}

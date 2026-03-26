@@ -236,16 +236,7 @@ export default function StaffDashboard() {
                   className="h-12 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-6 font-semibold text-white shadow-lg shadow-indigo-500/30 transition-all hover:scale-[1.02]"
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  Open Complaint Details
-                </Button>
-
-                <Button
-                  variant="outline"
-                  onClick={loadData}
-                  className="h-12 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10"
-                >
-                  Refresh Complaints
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  Open Complaints  
                 </Button>
               </div>
             </div>

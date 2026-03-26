@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { api } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -310,20 +310,25 @@ export default function SubmitComplaint() {
                   <Label className="font-medium text-slate-200">
                     Category *
                   </Label>
-
+                <div className ="relative">
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full h-12 rounded-xl border border-white/10 bg-white/5 text-white px-3"
+                    className="w-full h-12 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-xl text-white px-4 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-indigo-500/20 hover:bg-slate-900/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
                   >
                     <option value="">Select category</option>
 
                     {categories.map((c) => (
-                      <option key={c.categoryId} value={c.categoryId}>
+                      <option 
+                        key={c.categoryId} 
+                        value={c.categoryId}
+                        className="bg-slate-900/40 text-white">
                         {c.name}
                       </option>
                     ))}
                   </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
 
                 {/* Upload */}
