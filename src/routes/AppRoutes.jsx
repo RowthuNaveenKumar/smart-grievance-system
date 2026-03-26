@@ -7,15 +7,18 @@ import ComplaintDetails from "@/pages/ComplaintDetails";
 import ProtectedRoute from "./ProtectedRoute";
 import StudentDashboard from "@/pages/StudentDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
+import SplashScreen from "@/pages/SplashScreen";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<SplashScreen />} />
+        <Route path="/home" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signin" element={<SignIn />} />
-        
+
         <Route
           path="/student-dashboard"
           element={
@@ -48,6 +51,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute role="STAFF">
               <StaffDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin-dashboard"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminDashboard />
             </ProtectedRoute>
           }
         />
