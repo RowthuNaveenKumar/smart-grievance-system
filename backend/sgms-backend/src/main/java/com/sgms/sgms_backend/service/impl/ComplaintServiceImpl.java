@@ -137,10 +137,11 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         timelineService.createTimeline(
                 complaint,
-                "SUBMITTED",
+                ComplaintAction.SUBMITTED,
                 null,
                 ComplaintStatus.OPEN,
-                null
+                null,
+                getCurrentUser()
         );
 
         return getComplaintById(complaint.getComplaintId());
@@ -155,6 +156,8 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Complaint not found"));
+
+        validateStaffAccess(complaint);
 
         int nextLevel = complaint.getCurrentLevel() + 1;
 
@@ -171,6 +174,8 @@ public class ComplaintServiceImpl implements ComplaintService {
                         .orElseThrow(() ->
                                 new RuntimeException("Staff not found"));
 
+        ComplaintStatus oldStatus = complaint.getStatus();
+
         complaint.setAssignedTo(staff);
         complaint.setCurrentLevel(nextLevel);
         complaint.setStatus(ComplaintStatus.ESCALATED);
@@ -179,10 +184,11 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         timelineService.createTimeline(
                 complaint,
-                "ESCALATED",
-                ComplaintStatus.OPEN,
+                ComplaintAction.ESCALATE,
+                oldStatus,
                 ComplaintStatus.ESCALATED,
-                req.getNote()
+                req.getNote(),
+                getCurrentUser()
         );
 
         return getComplaintById(id);
@@ -200,6 +206,8 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Complaint not found"));
 
+        validateStaffAccess(complaint);
+
         ComplaintStatus oldStatus = complaint.getStatus();
         ComplaintStatus newStatus = action.toStatus();
 
@@ -213,10 +221,11 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         timelineService.createTimeline(
                 complaint,
-                action.name(),
+                action,
                 oldStatus,
                 newStatus,
-                req.getNote()
+                req.getNote(),
+                getCurrentUser()
         );
 
         return getComplaintById(id);
@@ -237,16 +246,18 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         complaint.setAssignedTo(staff);
 
+        ComplaintStatus oldStatus = complaint.getStatus();
+        complaint.setStatus(ComplaintStatus.IN_PROGRESS);
         complaintRepo.save(complaint);
 
         timelineService.createTimeline(
                 complaint,
-                ComplaintAction.AUTO_ASSIGNED.name(),
-                complaint.getStatus(),
-                complaint.getStatus(),
-                "Assigned by admin"
+                ComplaintAction.MARK_IN_PROGRESS,
+                oldStatus,
+                ComplaintStatus.IN_PROGRESS,
+                "Assigned by admin",
+                getCurrentUser()
         );
-
         return getComplaintById(id);
     }
 
@@ -361,10 +372,11 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         timelineService.createTimeline(
                 complaint,
-                accepted ? "STUDENT_ACCEPTED" : "STUDENT_REJECTED",
+                ComplaintAction.UPDATE_NOTE,
                 oldStatus,
                 complaint.getStatus(),
-                accepted ? "Student accepted resolution" : "Student rejected resolution"
+                accepted ? "Student accepted resolution" : "Student rejected resolution",
+                getCurrentUser()
         );
 
         return getComplaintById(id);
@@ -404,7 +416,6 @@ public class ComplaintServiceImpl implements ComplaintService {
     /* =========================================
        TO GET COMPLAINT DETAILS
    ========================================= */
-
     private ComplaintResponse mapToResponse(Complaint complaint) {
 
         List<String> files = complaintFileRepo
@@ -419,17 +430,21 @@ public class ComplaintServiceImpl implements ComplaintService {
                                 complaint.getComplaintId())
                         .stream()
                         .map(u -> TimelineResponse.builder()
-                                .action(u.getAction())
+                                .action(
+                                        u.getAction() != null ?
+                                                u.getAction().name() : null
+                                )
                                 .fromStatus(
                                         u.getFromStatus() != null ?
-                                                u.getFromStatus().name() : null)
+                                                u.getFromStatus().name() : null
+                                )
                                 .toStatus(
                                         u.getToStatus() != null ?
-                                                u.getToStatus().name() : null)
+                                                u.getToStatus().name() : null
+                                )
                                 .performedBy(
-                                        u.getPerformedBy() != null ?
-                                                u.getPerformedBy().getName() :
-                                                "SYSTEM")
+                                        getUserDisplayName(u.getPerformedBy())
+                                )
                                 .createdAt(u.getCreatedAt())
                                 .build())
                         .toList();
@@ -438,16 +453,79 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .complaintId(complaint.getComplaintId())
                 .title(complaint.getTitle())
                 .description(complaint.getDescription())
-                .category(complaint.getCategory().getName())
-                .priority(complaint.getPriority().name())
-                .status(complaint.getStatus().name())
-                .assignedTo(
-                        complaint.getAssignedTo() != null ?
-                                complaint.getAssignedTo().getName() : null
+
+                .category(
+                        complaint.getCategory() != null
+                                ? complaint.getCategory().getName()
+                                : null
                 )
+
+                .priority(
+                        complaint.getPriority() != null
+                                ? complaint.getPriority().name()
+                                : null
+                )
+
+                .status(
+                        complaint.getStatus() != null
+                                ? complaint.getStatus().name()
+                                : null
+                )
+
+                .assignedTo(
+                        complaint.getAssignedTo() != null
+                                ? complaint.getAssignedTo().getName()
+                                : null
+                )
+
                 .createdAt(complaint.getCreatedAt())
                 .files(files)
                 .timeline(timeline)
                 .build();
+    }
+
+    private String getUserDisplayName(User user) {
+
+        if (user == null) {
+            return "SYSTEM";
+        }
+
+        if (user.getAccountType() == AccountType.STUDENT) {
+            return studentRepo.findByUser_UserId(user.getUserId())
+                    .map(StudentInfo::getName)
+                    .orElse(user.getEmail());
+        }
+
+        if (user.getAccountType() == AccountType.STAFF) {
+            return staffRepo.findByUser_UserId(user.getUserId())
+                    .map(StaffInfo::getName)
+                    .orElse(user.getEmail());
+        }
+
+        return user.getEmail();
+    }
+
+    private void validateStaffAccess(Complaint complaint) {
+
+        User user = getCurrentUser();
+
+        if (user.getAccountType() == AccountType.STAFF) {
+
+            StaffInfo staff = staffRepo
+                    .findByUser_UserId(user.getUserId())
+                    .orElseThrow(() -> new RuntimeException("Staff not found"));
+
+            if (complaint.getAssignedTo() == null ||
+                    !complaint.getAssignedTo().getStaffId().equals(staff.getStaffId())) {
+
+                throw new RuntimeException("You are not assigned to this complaint");
+            }
+        }
+    }
+
+    private User getCurrentUser(){
+        String email=getCurrentUserEmail();
+        return userRepo.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

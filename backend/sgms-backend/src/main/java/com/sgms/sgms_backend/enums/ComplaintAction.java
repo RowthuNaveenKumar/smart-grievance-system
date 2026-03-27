@@ -3,10 +3,10 @@ package com.sgms.sgms_backend.enums;
 public enum ComplaintAction {
 
     SUBMITTED,
-    AUTO_ASSIGNED,
-    UPDATED,
-    RESOLVED,
-    ESCALATED;
+    MARK_IN_PROGRESS,
+    RESOLVE,
+    ESCALATE,
+    UPDATE_NOTE;
 
     public ComplaintStatus toStatus() {
 
@@ -14,13 +14,13 @@ public enum ComplaintAction {
 
             case SUBMITTED -> ComplaintStatus.OPEN;
 
-            case AUTO_ASSIGNED -> ComplaintStatus.IN_PROGRESS;
+            case MARK_IN_PROGRESS -> ComplaintStatus.IN_PROGRESS;
 
-            case UPDATED -> ComplaintStatus.IN_PROGRESS;
+            case UPDATE_NOTE -> ComplaintStatus.IN_PROGRESS;
 
-            case RESOLVED -> ComplaintStatus.RESOLVED;
+            case RESOLVE -> ComplaintStatus.RESOLVED;
 
-            case ESCALATED -> ComplaintStatus.ESCALATED;
+            case ESCALATE -> ComplaintStatus.ESCALATED;
         };
     }
 }

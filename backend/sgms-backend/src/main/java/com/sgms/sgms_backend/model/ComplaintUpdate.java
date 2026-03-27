@@ -1,6 +1,7 @@
 package com.sgms.sgms_backend.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.sgms.sgms_backend.enums.ComplaintAction;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -24,10 +25,10 @@ public class ComplaintUpdate {
 
     @ManyToOne
     @JoinColumn(name = "performed_by")
-    private StaffInfo performedBy;
+    private User performedBy;
 
-    @Column(nullable = false)
-    private String action;
+    @Enumerated(EnumType.STRING)
+    private ComplaintAction action;
 
     @Column(columnDefinition = "TEXT")
     private String note;

@@ -1,8 +1,10 @@
 package com.sgms.sgms_backend.service.timeline;
 
+import com.sgms.sgms_backend.enums.ComplaintAction;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import com.sgms.sgms_backend.model.Complaint;
 import com.sgms.sgms_backend.model.ComplaintUpdate;
+import com.sgms.sgms_backend.model.User;
 import com.sgms.sgms_backend.repository.ComplaintUpdateRepository;
 import org.springframework.stereotype.Service;
 
@@ -15,10 +17,11 @@ public class ComplaintTimelineService {
     }
 
     public void createTimeline(Complaint complaint,
-                               String action,
+                               ComplaintAction action,
                                ComplaintStatus from,
                                ComplaintStatus to,
-                               String note
+                               String note,
+                               User performedBy
     ) {
 
         ComplaintUpdate update=new ComplaintUpdate();
@@ -27,6 +30,7 @@ public class ComplaintTimelineService {
         update.setFromStatus(from);
         update.setToStatus(to);
         update.setNote(note);
+        update.setPerformedBy(performedBy);
 
         updateRepo.save(update);
 
