@@ -24,13 +24,20 @@ import {
   CheckCircle2,
   Lock,
 } from "lucide-react";
+import { useUser } from "@/context/UserContext";
 
 export default function ComplaintDetails() {
   const { id } = useParams();
+  const { user } = useUser();
+  const isStaff = user?.accountType == "STAFF";
+  const isStudent = user?.accountType === "STUDENT";
   const navigate = useNavigate();
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [note, setNote] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     loadComplaint();
@@ -64,8 +71,7 @@ export default function ComplaintDetails() {
       case "OPEN":
       case "IN_PROGRESS":
         return {
-          className:
-            "bg-cyan-500/15 text-cyan-300 border border-cyan-400/20",
+          className: "bg-cyan-500/15 text-cyan-300 border border-cyan-400/20",
           icon: <Clock3 className="h-3.5 w-3.5" />,
         };
       case "RESOLVED":
@@ -76,8 +82,7 @@ export default function ComplaintDetails() {
         };
       case "CLOSED":
         return {
-          className:
-            "bg-rose-500/15 text-rose-300 border border-rose-400/20",
+          className: "bg-rose-500/15 text-rose-300 border border-rose-400/20",
           icon: <Lock className="h-3.5 w-3.5" />,
         };
       default:
@@ -86,6 +91,70 @@ export default function ComplaintDetails() {
             "bg-slate-500/15 text-slate-300 border border-slate-400/20",
           icon: <ShieldCheck className="h-3.5 w-3.5" />,
         };
+    }
+  };
+
+  /* =========================================
+      Mark In Progress
+    ========================================= */
+
+  const markInProgress = async () => {
+    try {
+      setActionLoading(true);
+
+      await api.patch(
+        `/complaints/${id}/status`,
+        {
+          note,
+        },
+        {
+          params: { action: "MARK_IN_PROGRESS" },
+        },
+      );
+
+      loadComplaint();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const resolveComplaint = async () => {
+    try {
+      setActionLoading(true);
+
+      await api.patch(
+        `/complaints/${id}/status`,
+        {
+          note,
+        },
+        {
+          params: { action: "RESOLVE" },
+        },
+      );
+
+      loadComplaint();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const escalateComplaint = async () => {
+    try {
+      setActionLoading(true);
+
+      await api.patch(`/complaints/${id}/escalate`, {
+        note,
+      });
+
+      loadComplaint();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -244,6 +313,43 @@ export default function ComplaintDetails() {
                 />
               </div>
 
+              {isStaff && (
+                <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+                  <h3 className="mb-4 text-lg font-semibold text-white">
+                    Staff Actions
+                  </h3>
+
+                  <textarea
+                    placeholder="Add a note..."
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-slate-900/40 p-3 text-sm text-white"
+                  />
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {complaint.status === "OPEN" && (
+                      <Button onClick={markInProgress}>Mark In Progress</Button>
+                    )}
+
+                    {complaint.status === "IN_PROGRESS" && (
+                      <Button
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                        onClick={resolveComplaint}
+                      >
+                        Resolve
+                      </Button>
+                    )}
+
+                    <Button
+                      className="bg-orange-600 hover:bg-orange-700"
+                      onClick={escalateComplaint}
+                    >
+                      Escalate
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Attachments */}
               {complaint.files?.length > 0 && (
                 <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
@@ -264,7 +370,9 @@ export default function ComplaintDetails() {
                           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15">
                             <FileText className="h-5 w-5 text-indigo-300" />
                           </div>
-                          <span className="font-medium">Attachment {i + 1}</span>
+                          <span className="font-medium">
+                            Attachment {i + 1}
+                          </span>
                         </div>
                         <ChevronRight className="h-4 w-4 text-slate-400" />
                       </a>
@@ -327,7 +435,8 @@ function TimelineItem({ item }) {
           {item.fromStatus} → {item.toStatus}
         </p>
         <p className="text-xs text-slate-400">
-          by {item.performedBy} • {moment(item.createdAt).format("DD MMM, HH:mm")}
+          by {item.performedBy} •{" "}
+          {moment(item.createdAt).format("DD MMM, HH:mm")}
         </p>
       </div>
     </div>
