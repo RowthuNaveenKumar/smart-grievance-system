@@ -6,6 +6,8 @@ public enum ComplaintAction {
     MARK_IN_PROGRESS,
     RESOLVE,
     ESCALATE,
+    STUDENT_ACCEPT,
+    STUDENT_REJECT,
     UPDATE_NOTE;
 
     public ComplaintStatus toStatus() {
@@ -16,11 +18,15 @@ public enum ComplaintAction {
 
             case MARK_IN_PROGRESS -> ComplaintStatus.IN_PROGRESS;
 
-            case UPDATE_NOTE -> ComplaintStatus.IN_PROGRESS;
+            case UPDATE_NOTE -> null;
 
             case RESOLVE -> ComplaintStatus.RESOLVED;
 
             case ESCALATE -> ComplaintStatus.ESCALATED;
+
+            case STUDENT_ACCEPT -> ComplaintStatus.CLOSED;
+
+            case STUDENT_REJECT -> ComplaintStatus.OPEN;
         };
     }
 }

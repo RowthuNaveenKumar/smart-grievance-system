@@ -211,7 +211,9 @@ public class ComplaintServiceImpl implements ComplaintService {
         ComplaintStatus oldStatus = complaint.getStatus();
         ComplaintStatus newStatus = action.toStatus();
 
-        complaint.setStatus(newStatus);
+        if (newStatus != null) {
+            complaint.setStatus(newStatus);
+        }
 
         if (newStatus == ComplaintStatus.RESOLVED) {
             complaint.setResolvedAt(LocalDateTime.now());
@@ -360,10 +362,20 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Complaint not found"));
 
+        User currentUser=getCurrentUser();
+
+        if(!complaint.getStudent().getUser().getUserId().equals(currentUser.getUserId())){
+            throw new RuntimeException("Unauthorized access");
+        }
+
         ComplaintStatus oldStatus = complaint.getStatus();
+        //  Only allow feedback when RESOLVED
+        if (complaint.getStatus() != ComplaintStatus.RESOLVED) {
+            throw new RuntimeException("Feedback allowed only after resolution");
+        }
 
         if (accepted) {
-            complaint.setStatus(ComplaintStatus.RESOLVED);
+            complaint.setStatus(ComplaintStatus.CLOSED);
         } else {
             complaint.setStatus(ComplaintStatus.OPEN);
         }
@@ -372,10 +384,10 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         timelineService.createTimeline(
                 complaint,
-                ComplaintAction.UPDATE_NOTE,
+                accepted ? ComplaintAction.STUDENT_ACCEPT : ComplaintAction.STUDENT_REJECT,
                 oldStatus,
                 complaint.getStatus(),
-                accepted ? "Student accepted resolution" : "Student rejected resolution",
+                accepted ? "Student accepted resolution" : "Student rejected → reopened",
                 getCurrentUser()
         );
 
@@ -446,6 +458,7 @@ public class ComplaintServiceImpl implements ComplaintService {
                                         getUserDisplayName(u.getPerformedBy())
                                 )
                                 .createdAt(u.getCreatedAt())
+                                .note(u.getNote())
                                 .build())
                         .toList();
 
@@ -523,8 +536,8 @@ public class ComplaintServiceImpl implements ComplaintService {
         }
     }
 
-    private User getCurrentUser(){
-        String email=getCurrentUserEmail();
+    private User getCurrentUser() {
+        String email = getCurrentUserEmail();
         return userRepo.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }

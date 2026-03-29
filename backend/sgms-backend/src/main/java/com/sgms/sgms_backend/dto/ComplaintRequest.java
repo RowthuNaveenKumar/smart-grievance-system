@@ -15,5 +15,7 @@ public class ComplaintRequest {
 
     private Long categoryId;
 
+    private String categoryName;
+
     private Priority priority;    // LOW / MEDIUM / HIGH / CRITICAL
 }

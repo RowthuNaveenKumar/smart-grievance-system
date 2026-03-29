@@ -5,5 +5,5 @@ public enum ComplaintStatus {
     IN_PROGRESS,
     ESCALATED,
     RESOLVED,
-    REJECTED
+    CLOSED
 }

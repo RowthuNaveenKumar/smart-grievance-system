@@ -18,6 +18,7 @@ public class ComplaintCategoryController {
 
     @GetMapping
     public List<ComplaintCategory> getAllCategories(){
+
         return categoryRepo.findAll();
     }
 }

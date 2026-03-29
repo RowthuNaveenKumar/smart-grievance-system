@@ -2,6 +2,8 @@ package com.sgms.sgms_backend.controller;
 
 import com.sgms.sgms_backend.dto.*;
 import com.sgms.sgms_backend.enums.ComplaintAction;
+import com.sgms.sgms_backend.model.ComplaintCategory;
+import com.sgms.sgms_backend.repository.ComplaintCategoryRepository;
 import com.sgms.sgms_backend.service.ComplaintService;
 
 import jakarta.validation.Valid;
@@ -16,9 +18,11 @@ import java.util.List;
 public class ComplaintController {
 
     private final ComplaintService complaintService;
+    private final ComplaintCategoryRepository categoryRepo;
 
-    public ComplaintController(ComplaintService complaintService) {
+    public ComplaintController(ComplaintService complaintService, ComplaintCategoryRepository categoryRepo) {
         this.complaintService = complaintService;
+        this.categoryRepo = categoryRepo;
     }
 
     /* =========================================
@@ -143,4 +147,28 @@ public class ComplaintController {
         return complaintService.getComplaintById(id);
     }
 
+    /* =========================================
+    STUDENT FEEDBACK (ACCEPT / REJECT)
+    ========================================= */
+
+    @PostMapping("/{id}/feedback")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ComplaintResponse submitFeedback(
+            @PathVariable Long id,
+            @RequestParam boolean accepted
+    ) {
+        return complaintService.studentFeedback(id, accepted);
+    }
+
+    @GetMapping("/categories")
+    public List<CategoryDTO> getCategories() {
+        return categoryRepo.findAll()
+                .stream()
+                .map(c -> new CategoryDTO(
+                        c.getCategoryId(),
+                        c.getName(),
+                        c.getDepartment().getName()
+                ))
+                .toList();
+    }
 }
