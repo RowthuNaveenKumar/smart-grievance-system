@@ -111,7 +111,7 @@ export default function ComplaintDetails() {
           params: { action: "MARK_IN_PROGRESS" },
         },
       );
-
+      setNote("");
       loadComplaint();
     } catch (err) {
       console.error(err);
@@ -121,6 +121,10 @@ export default function ComplaintDetails() {
   };
 
   const resolveComplaint = async () => {
+    if (!note.trim()) {
+      alert("Please add resolution note");
+      return;
+    }
     try {
       setActionLoading(true);
 
@@ -134,6 +138,7 @@ export default function ComplaintDetails() {
         },
       );
 
+      setNote("");
       loadComplaint();
     } catch (err) {
       console.error(err);
@@ -143,11 +148,31 @@ export default function ComplaintDetails() {
   };
 
   const escalateComplaint = async () => {
+    if (!note.trim()) {
+      alert("Please provide reason for escalation");
+      return;
+    }
     try {
       setActionLoading(true);
 
       await api.patch(`/complaints/${id}/escalate`, {
         note,
+      });
+      setNote("");
+      loadComplaint();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const submitFeedback = async (accepted) => {
+    try {
+      setActionLoading(true);
+
+      await api.post(`/complaints/${id}/feedback`, null, {
+        params: { accepted },
       });
 
       loadComplaint();
@@ -328,11 +353,14 @@ export default function ComplaintDetails() {
 
                   <div className="mt-4 flex flex-wrap gap-3">
                     {complaint.status === "OPEN" && (
-                      <Button onClick={markInProgress}>Mark In Progress</Button>
+                      <Button disabled={actionLoading} onClick={markInProgress}>
+                        Mark In Progress
+                      </Button>
                     )}
 
                     {complaint.status === "IN_PROGRESS" && (
                       <Button
+                        disabled={actionLoading}
                         className="bg-emerald-600 hover:bg-emerald-700"
                         onClick={resolveComplaint}
                       >
@@ -341,10 +369,47 @@ export default function ComplaintDetails() {
                     )}
 
                     <Button
+                      disabled={actionLoading}
                       className="bg-orange-600 hover:bg-orange-700"
                       onClick={escalateComplaint}
                     >
                       Escalate
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {
+              /* =========================================
+                Student Feedback Section
+                ========================================= */}
+
+              {isStudent && complaint.status === "RESOLVED" && (
+                <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+                  <h3 className="mb-4 text-lg font-semibold text-white">
+                    Resolution Feedback
+                  </h3>
+
+                  <p className="text-sm text-slate-300 mb-4">
+                    Please confirm if your issue has been resolved
+                    satisfactorily.
+                  </p>
+
+                  <div className="flex gap-4">
+                    <Button
+                      disabled={actionLoading}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => submitFeedback(true)}
+                    >
+                      Accept Resolution
+                    </Button>
+
+                    <Button
+                      disabled={actionLoading}
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={() => submitFeedback(false)}
+                    >
+                      Reject & Reopen
                     </Button>
                   </div>
                 </div>
@@ -434,7 +499,14 @@ function TimelineItem({ item }) {
         <p className="mb-1 mt-1 text-xs text-slate-300">
           {item.fromStatus} → {item.toStatus}
         </p>
-        <p className="text-xs text-slate-400">
+        {item.note && (
+          <div className="mt-2 rounded-lg bg-indigo-500/10 border border-indigo-400/20 p-3">
+            <p className="text-xs text-indigo-200 font-medium">Note</p>
+            <p className="text-sm text-indigo-100 mt-1 italic">{item.note}</p>
+          </div>
+        )}
+
+        <p className="text-xs text-slate-400 mt-2">
           by {item.performedBy} •{" "}
           {moment(item.createdAt).format("DD MMM, HH:mm")}
         </p>

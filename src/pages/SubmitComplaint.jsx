@@ -45,7 +45,7 @@ export default function SubmitComplaint() {
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const res = await api.get("/complaint-categories");
+        const res = await api.get("/complaints/categories");
         setCategories(res.data);
       } catch (err) {
         console.error("Failed to load categories", err);
@@ -74,7 +74,7 @@ export default function SubmitComplaint() {
 
       const match = categories.find(
         (c) =>
-          c.name.toLowerCase() === prediction.predictedDepartment.toLowerCase(),
+          c.name.toLowerCase() === res.data.predicted_department.toLowerCase(),
       );
 
       if (match) {
@@ -310,24 +310,21 @@ export default function SubmitComplaint() {
                   <Label className="font-medium text-slate-200">
                     Category *
                   </Label>
-                <div className ="relative">
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full h-12 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-xl text-white px-4 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-indigo-500/20 hover:bg-slate-900/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
-                  >
-                    <option value="">Select category</option>
+                  <div className="relative">
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="w-full h-12 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-xl text-white px-4 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-indigo-500/20 hover:bg-slate-900/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                    >
+                      <option value="">Select category</option>
 
-                    {categories.map((c) => (
-                      <option 
-                        key={c.categoryId} 
-                        value={c.categoryId}
-                        className="bg-slate-900/40 text-white">
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      {categories.map((c) => (
+                        <option key={c.categoryId} value={c.categoryId}>
+                          {c.name} ({c.departmentName})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
 
