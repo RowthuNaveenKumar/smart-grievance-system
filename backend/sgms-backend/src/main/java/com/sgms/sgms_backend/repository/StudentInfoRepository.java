@@ -13,4 +13,7 @@ public interface StudentInfoRepository extends JpaRepository<StudentInfo, Long> 
 
     Optional<StudentInfo> findByUserEmail(String email);
 
+    boolean existsByEnrollmentNo(String enrollmentNo);
+
+    boolean existsByEmail(String email);
 }

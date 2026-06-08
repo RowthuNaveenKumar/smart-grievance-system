@@ -33,6 +33,10 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepo.findByEmail(req.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        if (!user.isEnabled()) {
+            throw new RuntimeException("Account disabled. Contact administrator.");
+        }
+
         if(!passwordEncoder.matches(req.getPassword(), user.getPassword())){
             throw new RuntimeException("Invalid credentials");
         }
@@ -70,6 +74,18 @@ public class AuthServiceImpl implements AuthService {
 
         User user=userRepo.findByEmail(req.getEmail())
                 .orElseThrow(()->new RuntimeException("User not found"));
+
+        if (!user.isEnabled()) {
+            throw new RuntimeException(
+                    "Account disabled. Contact administrator."
+            );
+        }
+
+        if (!user.isTempPassword()) {
+            throw new RuntimeException(
+                    "Account already activated. Please login."
+            );
+        }
 
         user.setPassword(passwordEncoder.encode(req.getPassword()));
         user.setTempPassword(false);
