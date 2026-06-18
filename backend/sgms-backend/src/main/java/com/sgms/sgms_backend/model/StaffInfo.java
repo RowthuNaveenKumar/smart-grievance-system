@@ -2,39 +2,47 @@ package com.sgms.sgms_backend.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.UpdateTimestamp;
+import java.util.Set;
 
-import java.time.LocalDateTime;
-
-@Data
 @Entity
-@Table(name = "staff_info")
+@Table(name="staff_info")
+@Data
 public class StaffInfo {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "staff_id")
-    private Long staffId;  // PK auto_increment
+    private Long staffId;
 
-    @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 120)
     private String email;
 
-    @Column(length = 255)
-    private String password; // null allowed for first login
-
-    @Column(nullable = false, length = 120)
-    private String department;
-
-    @Column(nullable = false, length = 120)
-    private String role;
-
-    @Column(length = 20)
     private String phone;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-    private LocalDateTime updatedAt;
+    @OneToOne
+    @JoinColumn(name="user_id")
+    private User user;
+
+    // division_id → academic_division table
+    @ManyToOne
+    @JoinColumn(name="division_id")
+    private AcademicDivision academicDivision;
+
+    @ManyToOne
+    @JoinColumn(name="department_id")
+    private Department department;
+
+    // floor_id → hostel_floor table
+    @ManyToOne
+    @JoinColumn(name="floor_id")
+    private HostelFloor floor;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name="staff_role",
+            joinColumns = @JoinColumn(name="staff_id"),
+            inverseJoinColumns = @JoinColumn(name="role_id")
+    )
+    private Set<Role> roles;
+
 }

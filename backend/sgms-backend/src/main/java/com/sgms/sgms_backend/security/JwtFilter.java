@@ -3,6 +3,7 @@ package com.sgms.sgms_backend.security;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,34 +23,54 @@ public class JwtFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
 
-        String authHeader = request.getHeader("Authorization");
+        String header = request.getHeader("Authorization");
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        if (header != null && header.startsWith("Bearer ")) {
 
-            String token = authHeader.substring(7);
+            String token = header.substring(7);
 
-            try {
-                Claims claims = jwtUtil.extractClaims(token);
+            Claims claims = jwtUtil.extractClaims(token);
 
-                // Extract required details
-                String email = claims.get("email", String.class);
-                String role = claims.get("role", String.class);
+            String email = claims.getSubject();
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                email, null,
-                                List.of(new SimpleGrantedAuthority(role))
-                        );
+//            String role=claims.get("role",String.class);
+//
+//            UsernamePasswordAuthenticationToken auth=
+//                    new UsernamePasswordAuthenticationToken(
+//                            email,
+//                            null,
+//                            List.of(new SimpleGrantedAuthority("ROLE_"+role))
+//                    );
 
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+            String role = claims.get("role", String.class);
+            String subRole = claims.get("subRole", String.class);
 
-            } catch (Exception e) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
+            List<SimpleGrantedAuthority> authorities =
+                    new java.util.ArrayList<>();
+
+            authorities.add(
+                    new SimpleGrantedAuthority("ROLE_" + role)
+            );
+
+            if (subRole != null) {
+                authorities.add(
+                        new SimpleGrantedAuthority("ROLE_" + subRole)
+                );
             }
+
+            UsernamePasswordAuthenticationToken auth =
+                    new UsernamePasswordAuthenticationToken(
+                            email,
+                            null,
+                            authorities
+                    );
+
+            SecurityContextHolder.getContext().setAuthentication(auth);
         }
 
         filterChain.doFilter(request, response);

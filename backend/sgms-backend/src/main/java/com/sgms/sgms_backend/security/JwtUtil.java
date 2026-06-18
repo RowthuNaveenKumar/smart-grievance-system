@@ -3,9 +3,11 @@ package com.sgms.sgms_backend.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
@@ -15,26 +17,37 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    private Key getSigningKey(){
-        return Keys.hmacShaKeyFor(secret.getBytes());
+    private final long EXPIRATION=86400000;
+
+    private Key getKey(){
+
+//        return Keys.hmacShaKeyFor(secret.getBytes());
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+
     }
 
-    public String generateToken(String email, String role, String userType){
+    public String generateToken(String email,String role,String subRole,String userType){
+
         return Jwts.builder()
-                .claim("email",email)
-                .claim("role",role)
-                .claim("userType",userType)
+                .setSubject(email)
+                .claim("role", role)          // STAFF
+                .claim("subRole", subRole)    // WARDEN
+                .claim("userType", userType)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis()+86400000))
-                .signWith(getSigningKey())
+                .setExpiration(new Date(System.currentTimeMillis()+EXPIRATION))
+                .signWith(getKey())
                 .compact();
+
     }
 
     public Claims extractClaims(String token){
+
         return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+                .setSigningKey(getKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+
     }
+
 }

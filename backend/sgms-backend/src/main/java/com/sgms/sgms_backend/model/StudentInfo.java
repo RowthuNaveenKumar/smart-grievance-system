@@ -1,7 +1,9 @@
 package com.sgms.sgms_backend.model;
 
+import com.sgms.sgms_backend.enums.StudentYear;
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
@@ -13,30 +15,39 @@ public class StudentInfo {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "student_id")
+    private Long studentId;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(length = 255)
-    private String password;
+    @OneToOne
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    @Column(nullable = false, length = 100)
-    private String department;
 
-    @Column(name = "class_name", length = 100)
-    private String className;
+    @Column(name = "enrollment_no", nullable = false, unique = true)
+    private String enrollmentNo;
 
-    @Column(length = 10)
-    private String year;
+    @Enumerated(EnumType.STRING)
+    private StudentYear year;
+
+    @ManyToOne
+    @JoinColumn(name = "division_id", nullable = false)
+    private AcademicDivision academicDivision;
+
+    @ManyToOne
+    @JoinColumn(name = "room_id")
+    private Room room;
+
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updated_at", columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    @Column(name = "enrollment_no", unique = true, length = 100)
-    private String enrollmentNo;
 }

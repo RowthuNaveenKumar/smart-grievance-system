@@ -1,80 +1,97 @@
 package com.sgms.sgms_backend.service.impl;
 
-import com.sgms.sgms_backend.dto.*;
-import com.sgms.sgms_backend.model.*;
-import com.sgms.sgms_backend.repository.*;
+import com.sgms.sgms_backend.dto.AuthResponse;
+import com.sgms.sgms_backend.dto.LoginRequest;
+import com.sgms.sgms_backend.dto.RegisterRequest;
+import com.sgms.sgms_backend.enums.AccountType;
+import com.sgms.sgms_backend.model.Role;
+import com.sgms.sgms_backend.model.StaffInfo;
+import com.sgms.sgms_backend.model.User;
+import com.sgms.sgms_backend.repository.StaffInfoRepository;
+import com.sgms.sgms_backend.repository.UserRepository;
 import com.sgms.sgms_backend.security.JwtUtil;
 import com.sgms.sgms_backend.service.AuthService;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-@Service   // ⭐ THIS IS CRITICAL
+
+
+@Service
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private final StudentInfoRepository studentRepo;
+    private final UserRepository userRepo;
     private final StaffInfoRepository staffRepo;
     private final JwtUtil jwtUtil;
-    private final BCryptPasswordEncoder encoder;
-
-    public AuthServiceImpl(StudentInfoRepository studentRepo,
-                           StaffInfoRepository staffRepo,
-                           JwtUtil jwtUtil, BCryptPasswordEncoder encoder) {
-        this.studentRepo = studentRepo;
-        this.staffRepo = staffRepo;
-        this.jwtUtil = jwtUtil;
-        this.encoder = encoder;
-    }
+    private final PasswordEncoder passwordEncoder;
 
     @Override
-    public AuthResponse signin(RegisterRequest req) {
+    public AuthResponse login(LoginRequest req){
 
-        StudentInfo student = studentRepo.findByEmail(req.getEmail());
-        StaffInfo staff = staffRepo.findByEmail(req.getEmail());
+        User user = userRepo.findByEmail(req.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (student == null && staff == null) {
-            throw new RuntimeException("Email not found. Contact admin.");
+        if (!user.isEnabled()) {
+            throw new RuntimeException("Account disabled. Contact administrator.");
         }
 
-        if (student != null) {
-            student.setPassword(encoder.encode(req.getPassword()));
-            studentRepo.save(student);
-
-            String token = jwtUtil.generateToken(
-                    student.getEmail(), "STUDENT", "STUDENT");
-            return new AuthResponse(token, "STUDENT", "STUDENT");
+        if(!passwordEncoder.matches(req.getPassword(), user.getPassword())){
+            throw new RuntimeException("Invalid credentials");
         }
 
-        staff.setPassword(encoder.encode(req.getPassword()));
-        staffRepo.save(staff);
+        // System role (for Spring Security)
+        String role = user.getAccountType().name();   // STUDENT or STAFF
+
+        // Business role (for workflow)
+        String subRole = null;
+
+        if(user.getAccountType() == AccountType.STAFF){
+
+            StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
+                    .orElseThrow(() -> new RuntimeException("Staff not found"));
+
+            subRole = staff.getRoles()
+                    .stream()
+                    .map(Role::getRoleName)
+                    .findFirst()
+                    .orElse(null);
+        }
 
         String token = jwtUtil.generateToken(
-                staff.getEmail(), staff.getRole(), "STAFF");
-        return new AuthResponse(token, staff.getRole(), "STAFF");
+                user.getEmail(),
+                role,      // STAFF
+                subRole,   // WARDEN
+                user.getAccountType().name()
+        );
+
+        return new AuthResponse(token, role, user.getAccountType().name());
     }
 
     @Override
-    public AuthResponse login(LoginRequest req) {
+    public AuthResponse signin(RegisterRequest req){
 
-        StudentInfo student = studentRepo.findByEmail(req.getEmail());
-        StaffInfo staff = staffRepo.findByEmail(req.getEmail());
+        User user=userRepo.findByEmail(req.getEmail())
+                .orElseThrow(()->new RuntimeException("User not found"));
 
-        if (student != null &&
-                encoder.matches(req.getPassword(), student.getPassword())) {
-
-            String token = jwtUtil.generateToken(
-                    student.getEmail(), "STUDENT", "STUDENT");
-            return new AuthResponse(token, "STUDENT", "STUDENT");
+        if (!user.isEnabled()) {
+            throw new RuntimeException(
+                    "Account disabled. Contact administrator."
+            );
         }
 
-        if (staff != null &&
-                encoder.matches(req.getPassword(), staff.getPassword())) {
-
-            String token = jwtUtil.generateToken(
-                    staff.getEmail(), staff.getRole(), "STAFF");
-            return new AuthResponse(token, staff.getRole(), "STAFF");
+        if (!user.isTempPassword()) {
+            throw new RuntimeException(
+                    "Account already activated. Please login."
+            );
         }
 
-        throw new RuntimeException("Invalid credentials");
+        user.setPassword(passwordEncoder.encode(req.getPassword()));
+        user.setTempPassword(false);
+
+        userRepo.save(user);
+
+        return login(new LoginRequest(req.getEmail(),req.getPassword()));
     }
 }
