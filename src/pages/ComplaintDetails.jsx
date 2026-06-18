@@ -368,19 +368,20 @@ export default function ComplaintDetails() {
                       </Button>
                     )}
 
-                    <Button
-                      disabled={actionLoading}
-                      className="bg-orange-600 hover:bg-orange-700"
-                      onClick={escalateComplaint}
-                    >
-                      Escalate
-                    </Button>
+                    {complaint.status != "CLOSED" && (
+                      <Button
+                        disabled={actionLoading}
+                        className="bg-orange-600 hover:bg-orange-700"
+                        onClick={escalateComplaint}
+                      >
+                        Escalate
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
 
-              {
-              /* =========================================
+              {/* =========================================
                 Student Feedback Section
                 ========================================= */}
 

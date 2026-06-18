@@ -9,6 +9,8 @@ import StudentDashboard from "@/pages/StudentDashboard";
 import StaffDashboard from "@/pages/StaffDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import SplashScreen from "@/pages/SplashScreen";
+import StudentsManagement from "@/pages/admin/StudentsManagement";
+import StaffManagement from "@/pages/admin/StaffManagement";
 
 export default function AppRoutes() {
   return (
@@ -59,6 +61,24 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute role="ADMIN">
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/students"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <StudentsManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/staff"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <StaffManagement />
             </ProtectedRoute>
           }
         />

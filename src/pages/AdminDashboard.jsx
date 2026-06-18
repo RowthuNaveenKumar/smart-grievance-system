@@ -43,21 +43,22 @@ export default function AdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-
       const complaintsRes = await api.get("/complaints");
       const departmentsRes = await api.get("/departments");
-      const staffRes = await api.get("/staff");
+      const staffRes = await api.get("/admin/staff");
 
       const complaints = complaintsRes.data || [];
       const departments = departmentsRes.data || [];
       const staff = staffRes.data || [];
 
       const activeComplaints = complaints.filter((c) =>
-        ["submitted", "assigned", "in_progress", "info_requested"].includes(c.status)
+        ["submitted", "assigned", "in_progress", "info_requested"].includes(
+          c.status,
+        ),
       );
 
       const resolvedComplaints = complaints.filter(
-        (c) => c.status === "resolved" || c.status === "closed"
+        (c) => c.status === "resolved" || c.status === "closed",
       );
 
       setStats({
@@ -79,6 +80,21 @@ export default function AdminDashboard() {
 
   const quickActions = [
     {
+      title: "Students",
+      description: "Manage student accounts",
+      icon: Users,
+      action: () => navigate("/admin/students"),
+      color: "from-amber-400 via-orange-500 to-yellow-500",
+    },
+
+    {
+      title: "Staff",
+      description: "Manage staff accounts",
+      icon: ShieldCheck,
+      action: () => navigate("/admin/staff"),
+      color: "from-cyan-500 via-blue-500 to-indigo-500",
+    },
+    {
       title: "Manage Departments",
       description: "Add, edit, or remove departments",
       icon: Building2,
@@ -89,7 +105,7 @@ export default function AdminDashboard() {
       title: "View All Complaints",
       description: "Browse and manage complaints",
       icon: FileText,
-      action: () => navigate("/all-complaints"),
+      action: () => navigate("/complaints"),
       color: "from-purple-500 via-indigo-500 to-blue-500",
     },
     {
@@ -98,13 +114,6 @@ export default function AdminDashboard() {
       icon: TrendingUp,
       action: () => navigate("/analytics"),
       color: "from-emerald-500 via-green-500 to-teal-500",
-    },
-    {
-      title: "Manage Users",
-      description: "Staff and student management",
-      icon: Users,
-      action: () => navigate("/manage-users"),
-      color: "from-amber-400 via-orange-500 to-yellow-500",
     },
   ];
 
@@ -179,7 +188,7 @@ export default function AdminDashboard() {
               <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-5xl xl:text-6xl">
                 Welcome,{" "}
                 <span className="bg-gradient-to-r from-white via-indigo-200 to-blue-300 bg-clip-text text-transparent">
-                   {user?.staff?.name || "Admin"}
+                  {user?.staff?.name || "Admin"}
                 </span>
               </h1>
 
@@ -224,7 +233,8 @@ export default function AdminDashboard() {
                 <h3 className="text-3xl font-bold text-white">
                   {stats.totalComplaints > 0
                     ? `${Math.round(
-                        (stats.resolvedComplaints / stats.totalComplaints) * 100
+                        (stats.resolvedComplaints / stats.totalComplaints) *
+                          100,
                       )}%`
                     : "0%"}
                 </h3>
@@ -282,8 +292,7 @@ export default function AdminDashboard() {
               value: stats.totalDepartments,
               sub: "Total departments",
               icon: Building2,
-              color:
-                "from-cyan-400 via-sky-500 to-blue-500 shadow-cyan-500/30",
+              color: "from-cyan-400 via-sky-500 to-blue-500 shadow-cyan-500/30",
             },
           ].map((item, index) => (
             <div
@@ -293,7 +302,9 @@ export default function AdminDashboard() {
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               <div className="relative flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-300">{item.label}</p>
+                  <p className="text-sm font-medium text-slate-300">
+                    {item.label}
+                  </p>
                   <h3 className="mt-3 text-3xl font-bold text-white">
                     {item.value}
                   </h3>
@@ -340,7 +351,9 @@ export default function AdminDashboard() {
                   <action.icon className="h-6 w-6 text-white" />
                 </div>
 
-                <h3 className="text-lg font-semibold text-white">{action.title}</h3>
+                <h3 className="text-lg font-semibold text-white">
+                  {action.title}
+                </h3>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
                   {action.description}
                 </p>
@@ -370,7 +383,9 @@ export default function AdminDashboard() {
 
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
               Total Staff{" "}
-              <span className="font-semibold text-white">{stats.totalStaff}</span>
+              <span className="font-semibold text-white">
+                {stats.totalStaff}
+              </span>
             </div>
           </div>
 
@@ -401,7 +416,7 @@ export default function AdminDashboard() {
 
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${getStatusStyle(
-                        complaint.status
+                        complaint.status,
                       )}`}
                     >
                       {complaint.status?.replace("_", " ")}
