@@ -12,6 +12,12 @@ public class StudentResponse {
     private String email;
     private String enrollmentNo;
     private String year;
+
+    private Long divisionId;
     private String division;
+
+    private Long roomId;
     private String room;
+
+    private boolean enabled;
 }

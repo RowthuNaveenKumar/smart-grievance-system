@@ -1,6 +1,10 @@
 package com.sgms.sgms_backend.controller;
 
 import com.sgms.sgms_backend.dto.*;
+import com.sgms.sgms_backend.dto.admin_dashboard.DashboardStatsResponse;
+import com.sgms.sgms_backend.dto.staff.CreateStaffRequest;
+import com.sgms.sgms_backend.dto.staff.StaffResponse;
+import com.sgms.sgms_backend.dto.staff.UpdateStaffRequest;
 import com.sgms.sgms_backend.service.AdminManagementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -61,4 +65,61 @@ public class AdminController {
         return adminService.disableStudent(id);
     }
 
+
+    /* =========================================
+       STAFF
+    ========================================= */
+
+    @PostMapping("/staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StaffResponse createStaff(
+            @RequestBody CreateStaffRequest request
+    ) {
+
+        return adminService.createStaff(request);
+    }
+
+    @GetMapping("/staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<StaffResponse> getAllStaff() {
+        return adminService.getAllStaff();
+    }
+
+    @GetMapping("/staff/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StaffResponse getStaffById(
+            @PathVariable Long id
+    ) {
+        return adminService.getStaffById(id);
+    }
+
+    @PutMapping("/staff/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StaffResponse updateStaff(
+            @PathVariable Long id,
+            @RequestBody UpdateStaffRequest request
+    ) {
+
+        return adminService.updateStaff(id, request);
+    }
+
+    @PatchMapping("/staff/{id}/disable")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StatusResponse disableStaff(
+            @PathVariable Long id
+    ) {
+
+        return adminService.disableStaff(id);
+    }
+
+    /* =========================================
+       Dashboard Stats
+    ========================================= */
+
+    @GetMapping("/dashboard/stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    public DashboardStatsResponse getDashboardStats() {
+
+        return adminService.getDashboardStats();
+    }
 }

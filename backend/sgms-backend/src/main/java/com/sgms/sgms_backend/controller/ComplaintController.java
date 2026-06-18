@@ -2,6 +2,8 @@ package com.sgms.sgms_backend.controller;
 
 import com.sgms.sgms_backend.dto.*;
 import com.sgms.sgms_backend.enums.ComplaintAction;
+import com.sgms.sgms_backend.enums.ComplaintStatus;
+import com.sgms.sgms_backend.enums.Priority;
 import com.sgms.sgms_backend.model.ComplaintCategory;
 import com.sgms.sgms_backend.repository.ComplaintCategoryRepository;
 import com.sgms.sgms_backend.service.ComplaintService;
@@ -161,6 +163,7 @@ public class ComplaintController {
     }
 
     @GetMapping("/categories")
+    @PreAuthorize("isAuthenticated()")
     public List<CategoryDTO> getCategories() {
         return categoryRepo.findAll()
                 .stream()
@@ -171,4 +174,42 @@ public class ComplaintController {
                 ))
                 .toList();
     }
+
+
+    /* =========================================
+    ADMIN ---> DashBoard
+    ========================================= */
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<ComplaintResponse> getAllComplaints() {
+
+        return complaintService.getAllComplaints();
+    }
+
+    @GetMapping("/status/{status}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<ComplaintResponse> getByStatus(
+            @PathVariable ComplaintStatus status
+    ) {
+        return complaintService.getComplaintsByStatus(status);
+    }
+
+    @GetMapping("/priority/{priority}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<ComplaintResponse> getByPriority(
+            @PathVariable Priority priority
+    ) {
+        return complaintService.getComplaintsByPriority(priority);
+    }
+
+    @GetMapping("/department/{departmentId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<ComplaintResponse> getByDepartment(
+            @PathVariable Long departmentId
+    ) {
+        return complaintService.getComplaintsByDepartment(
+                departmentId
+        );
+    }
+
 }

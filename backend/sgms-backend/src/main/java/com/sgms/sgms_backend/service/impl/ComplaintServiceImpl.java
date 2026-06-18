@@ -541,4 +541,52 @@ public class ComplaintServiceImpl implements ComplaintService {
         return userRepo.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
+
+    /* =========================================
+       ADMIN --> get all complaints
+   ========================================= */
+    @Override
+    public List<ComplaintResponse> getAllComplaints() {
+
+        return complaintRepo
+                .findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ComplaintResponse> getComplaintsByStatus(
+            ComplaintStatus status
+    ) {
+
+        return complaintRepo.findByStatus(status)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ComplaintResponse> getComplaintsByPriority(
+            Priority priority
+    ) {
+
+        return complaintRepo.findByPriority(priority)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+
+    @Override
+    public List<ComplaintResponse> getComplaintsByDepartment(Long departmentId) {
+
+        return complaintRepo
+                .findByDepartmentDepartmentId(departmentId)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+
 }

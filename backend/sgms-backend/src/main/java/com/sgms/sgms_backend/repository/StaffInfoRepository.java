@@ -74,4 +74,6 @@ public interface StaffInfoRepository extends JpaRepository<StaffInfo, Long> {
 
     List<StaffInfo> findAllByRolesContains(Role role);
 
+    boolean existsByEmail(String email);
+
 }

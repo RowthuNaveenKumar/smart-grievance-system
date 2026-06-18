@@ -2,6 +2,8 @@ package com.sgms.sgms_backend.service;
 
 import com.sgms.sgms_backend.dto.*;
 import com.sgms.sgms_backend.enums.ComplaintAction;
+import com.sgms.sgms_backend.enums.ComplaintStatus;
+import com.sgms.sgms_backend.enums.Priority;
 import com.sgms.sgms_backend.model.Complaint;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,4 +34,17 @@ public interface ComplaintService {
     ComplaintResponse assignStaff(Long id, Long staffId);
 
     ComplaintResponse studentFeedback(Long id, boolean accepted);
+
+    /* =========================================
+        ADMIN --> DASHBOARD
+    ========================================= */
+    List<ComplaintResponse> getAllComplaints();
+
+    List<ComplaintResponse> getComplaintsByStatus(ComplaintStatus status);
+
+    List<ComplaintResponse> getComplaintsByPriority(Priority priority);
+
+    List<ComplaintResponse> getComplaintsByDepartment(Long departmentId);
+
+
 }
