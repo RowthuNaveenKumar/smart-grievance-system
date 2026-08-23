@@ -38,17 +38,25 @@ export default function SubmitComplaint() {
 
   const [mlPrediction, setMlPrediction] = useState(null);
   const [predicting, setPredicting] = useState(false);
+  const [predictionError, setPredictionError] = useState(null);
 
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState(null);
 
   useEffect(() => {
     const loadCategories = async () => {
       try {
+        setCategoriesLoading(true);
+        setCategoriesError(null);
         const res = await api.get("/complaints/categories");
         setCategories(res.data);
       } catch (err) {
         console.error("Failed to load categories", err);
+        setCategoriesError("Unable to load complaint categories. Please refresh and try again.");
+      } finally {
+        setCategoriesLoading(false);
       }
     };
 
@@ -56,39 +64,57 @@ export default function SubmitComplaint() {
   }, []);
 
   const predictCategory = async () => {
-    if (!form.title || !form.description) return;
+    if (!form.title?.trim() && !form.description?.trim()) return;
 
     try {
       setPredicting(true);
+      setPredictionError(null);
 
       const res = await api.post("/complaints/predict", {
-        title: form.title,
-        complaint_text: form.description,
+        title: form.title || "",
+        complaint_text: form.description || "",
       });
+
+      const {
+        categoryId,
+        categoryName,
+        departmentName,
+        confidenceScore,
+        highConfidence,
+        suggestionNote,
+      } = res.data;
 
       setMlPrediction({
-        predictedDepartment: res.data.predicted_department,
-        predictedPriority: res.data.predicted_priority,
-        confidence: res.data.confidence,
+        categoryId,
+        categoryName,
+        departmentName,
+        confidence: confidenceScore,
+        highConfidence: Boolean(highConfidence),
+        suggestionNote,
       });
 
-      const match = categories.find(
-        (c) =>
-          c.name.toLowerCase() === res.data.predicted_department.toLowerCase(),
-      );
-
-      if (match) {
-        setSelectedCategory(match.categoryId);
+      // Auto-select category ONLY if high confidence and categoryId is present
+      if (highConfidence && categoryId !== null && categoryId !== undefined) {
+        setSelectedCategory(String(categoryId));
       }
     } catch (err) {
       console.error("ML prediction error:", err);
+      setPredictionError(
+        "AI suggestion is currently unavailable. Please select your category manually below."
+      );
+    } finally {
+      setPredicting(false);
     }
-
-    setPredicting(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!selectedCategory) {
+      alert("Please select a complaint category before submitting.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -97,8 +123,9 @@ export default function SubmitComplaint() {
       const complaintData = {
         title: form.title,
         description: form.description,
-        categoryId: selectedCategory,
-        priority: (mlPrediction?.predictedPriority || "LOW").toUpperCase(),
+        // Parse to integer so the backend receives a Long, not a string
+        categoryId: parseInt(selectedCategory, 10),
+        priority: "LOW",
       };
 
       fd.append(
@@ -120,7 +147,11 @@ export default function SubmitComplaint() {
 
       navigate(`/complaint/${res.data.complaintId}`);
     } catch (err) {
-      console.error(err);
+      console.error("Complaint submission failed:", err);
+      alert(
+        err?.response?.data?.message ||
+        "Failed to submit complaint. Please try again."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -133,19 +164,6 @@ export default function SubmitComplaint() {
 
   const removeFile = (index) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const getPriorityStyles = (priority) => {
-    switch ((priority || "").toUpperCase()) {
-      case "HIGH":
-        return "bg-red-500/15 text-red-300 border border-red-400/20";
-      case "MEDIUM":
-        return "bg-yellow-500/15 text-yellow-300 border border-yellow-400/20";
-      case "LOW":
-        return "bg-cyan-500/15 text-cyan-300 border border-cyan-400/20";
-      default:
-        return "bg-indigo-500/15 text-indigo-300 border border-indigo-400/20";
-    }
   };
 
   return (
@@ -230,7 +248,7 @@ export default function SubmitComplaint() {
                   />
                 </div>
 
-                {/* AI Auto Classify */}
+                {/* AI Category Suggestion */}
                 <div className="rounded-2xl border border-indigo-200/20 bg-gradient-to-br from-indigo-300/15 via-blue-500/10 to-cyan-500/10 p-5 shadow-lg shadow-indigo-500/20">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -240,10 +258,10 @@ export default function SubmitComplaint() {
 
                       <div>
                         <p className="text-sm font-semibold text-indigo-100">
-                          AI Auto Classification
+                          AI Category Suggestion
                         </p>
                         <p className="text-xs text-slate-300">
-                          Predict category and priority automatically
+                          Suggest category based on complaint text
                         </p>
                       </div>
                     </div>
@@ -256,23 +274,34 @@ export default function SubmitComplaint() {
                   <Button
                     type="button"
                     onClick={predictCategory}
-                    disabled={predicting}
-                    className="h-14 w-full rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 font-semibold text-white"
+                    disabled={predicting || (!form.title?.trim() && !form.description?.trim())}
+                    className="h-14 w-full rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 font-semibold text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {predicting ? (
                       <>
                         <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                        Analyzing...
+                        Analyzing Complaint...
                       </>
                     ) : (
                       <>
                         <Sparkles className="mr-2 w-5 h-5 animate-pulse" />
-                        Auto-Classify with AI
+                        Suggest Category with AI
                       </>
                     )}
                   </Button>
 
-                  {mlPrediction && (
+                  {predictionError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-xs text-yellow-300 flex items-center gap-2"
+                    >
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{predictionError}</span>
+                    </motion.div>
+                  )}
+
+                  {mlPrediction && !predictionError && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -281,31 +310,56 @@ export default function SubmitComplaint() {
                       <div className="flex items-center gap-2 mb-2">
                         <Stars className="w-4 h-4 text-indigo-300" />
                         <span className="text-sm font-semibold text-indigo-200">
-                          AI Prediction
+                          AI Category Suggestion
                         </span>
-                        <span className="ml-auto text-xs text-indigo-300">
-                          {Math.round((mlPrediction.confidence || 0.8) * 100)}%
+                        <span
+                          className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+                            mlPrediction.highConfidence
+                              ? "bg-green-500/20 text-green-300"
+                              : "bg-yellow-500/20 text-yellow-300"
+                          }`}
+                        >
+                          {Math.round((mlPrediction.confidence || 0) * 100)}% confidence
                         </span>
                       </div>
 
-                      <p className="text-sm text-slate-200">
-                        Category:
-                        <b className="ml-1 uppercase">
-                          {mlPrediction.predictedDepartment}
-                        </b>
-                        <br />
-                        Priority:
-                        <b
-                          className={`ml-1 px-2 py-1 rounded ${getPriorityStyles(
-                            mlPrediction.predictedPriority,
-                          )}`}
-                        >
-                          {mlPrediction.predictedPriority}
-                        </b>
-                      </p>
+                      {mlPrediction.highConfidence && mlPrediction.categoryId ? (
+                        <>
+                          <p className="text-sm text-slate-200 mb-1">
+                            Suggested Category:
+                            <b className="ml-1 uppercase text-indigo-300">
+                              {mlPrediction.categoryName || "Suggested"}
+                            </b>
+                            {mlPrediction.departmentName && (
+                              <span className="text-xs text-slate-400 ml-1">
+                                ({mlPrediction.departmentName})
+                              </span>
+                            )}
+                          </p>
+                          {mlPrediction.suggestionNote && (
+                            <p className="text-xs text-slate-300 mb-1">
+                              {mlPrediction.suggestionNote}
+                            </p>
+                          )}
+                          <p className="text-xs text-emerald-300/90 mt-2">
+                            ✓ Category preselected. You can freely change it below if needed.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs text-yellow-300 mt-1">
+                            ⚠ {mlPrediction.suggestionNote || "Low confidence — please choose your category manually from the dropdown below."}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-2">
+                            No category was automatically assigned. Please select one manually.
+                          </p>
+                        </>
+                      )}
                     </motion.div>
                   )}
                 </div>
+
+                {/* Category Dropdown */}
                 <div className="space-y-2">
                   <Label className="font-medium text-slate-200">
                     Category *
@@ -314,9 +368,14 @@ export default function SubmitComplaint() {
                     <select
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="w-full h-12 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-xl text-white px-4 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-indigo-500/20 hover:bg-slate-900/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                      disabled={categoriesLoading}
+                      className="w-full h-12 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-xl text-white px-4 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-indigo-500/20 hover:bg-slate-900/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <option value="">Select category</option>
+                      <option value="">
+                        {categoriesLoading
+                          ? "Loading categories…"
+                          : "Select category"}
+                      </option>
 
                       {categories.map((c) => (
                         <option key={c.categoryId} value={c.categoryId}>
@@ -326,6 +385,13 @@ export default function SubmitComplaint() {
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
+
+                  {categoriesError && (
+                    <p className="text-sm text-red-400 mt-1 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      {categoriesError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Upload */}
