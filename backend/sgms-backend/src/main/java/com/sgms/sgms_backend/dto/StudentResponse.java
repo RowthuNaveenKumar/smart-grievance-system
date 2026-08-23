@@ -7,7 +7,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class StudentResponse {
 
-    private Long studentId;
+    private Integer studentId;
     private String name;
     private String email;
     private String enrollmentNo;
@@ -16,7 +16,7 @@ public class StudentResponse {
     private Long divisionId;
     private String division;
 
-    private Long roomId;
+    private Integer roomId;
     private String room;
 
     private boolean enabled;

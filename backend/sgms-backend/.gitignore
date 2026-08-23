@@ -1,77 +1,26 @@
-###############################
-# Maven / Java
-###############################
+# Target & Build Output
 target/
-*.class
+out/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+.env_sen
+*.pem
+*.key
+credentials*
+secrets*
+
+# Logs & Temporary Files
 *.log
+logs/
+uploads/
+hs_err_pid*
+replay_pid*
 
-###############################
-# Spring Boot Artifacts
-###############################
-*.jar
-*.war
-*.zip
-
-###############################
-# IntelliJ IDEA
-###############################
+# IDE & OS Files
 .idea/
-*.iml
-*.iws
-*.ipr
-
-###############################
-# Eclipse / STS
-###############################
-.classpath
-.project
-.settings/
-.apt_generated/
-.factorypath/
-.springBeans/
-.sts4-cache/
-
-###############################
-# NetBeans
-###############################
-nbproject/private/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
-
-###############################
-# VS Code
-###############################
 .vscode/
-
-###############################
-# OS Files
-###############################
 .DS_Store
 Thumbs.db
-
-###############################
-# Logs
-###############################
-logs/
-*.log
-
-###############################
-# Environment / Secrets
-###############################
-application.properties
-*.env
-.env*
-
-###############################
-# Temp & Swap
-###############################
-*.tmp
-*.swp
-*.swo
-
-###############################
-# Project Specific
-###############################
-uploads/

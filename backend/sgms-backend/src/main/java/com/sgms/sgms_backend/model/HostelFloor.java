@@ -11,7 +11,7 @@ public class HostelFloor {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "floor_id")
-    private Long floorId;
+    private Integer floorId;
 
     @ManyToOne
     @JoinColumn(name = "hostel_id", nullable = false)

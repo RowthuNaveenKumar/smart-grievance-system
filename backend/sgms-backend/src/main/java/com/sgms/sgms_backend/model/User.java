@@ -2,7 +2,6 @@ package com.sgms.sgms_backend.model;
 
 import com.sgms.sgms_backend.enums.AccountType;
 import jakarta.persistence.*;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -17,7 +16,7 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
-    private Long userId;
+    private Integer userId;
 
     @Column(nullable = false, unique = true)
     private String email;

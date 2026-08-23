@@ -12,7 +12,7 @@ import java.util.List;
 
 public interface ComplaintService {
 
-    MLResponse predict(MLRequest request);
+    CategorySuggestionResponse predict(MLRequest request);
 
     ComplaintResponse createComplaint(
             ComplaintRequest request,

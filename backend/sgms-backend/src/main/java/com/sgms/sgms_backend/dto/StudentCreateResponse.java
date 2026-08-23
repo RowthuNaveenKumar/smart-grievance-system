@@ -7,7 +7,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class StudentCreateResponse {
 
-    private Long studentId;
+    private Integer studentId;
     private String name;
     private String email;
     private String enrollmentNo;

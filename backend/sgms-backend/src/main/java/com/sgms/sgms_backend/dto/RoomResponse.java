@@ -7,6 +7,6 @@ import lombok.Data;
 @AllArgsConstructor
 public class RoomResponse {
 
-    private Long roomId;
+    private Integer roomId;
     private String roomNumber;
 }
