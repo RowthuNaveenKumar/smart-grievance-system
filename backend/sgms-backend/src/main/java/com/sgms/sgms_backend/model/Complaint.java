@@ -53,7 +53,7 @@ public class Complaint {
     private Integer currentLevel;
 
     @Column(name = "ml_predicted_category")
-    private String mlPredictedCategory;
+    private String mlPredictedClass;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

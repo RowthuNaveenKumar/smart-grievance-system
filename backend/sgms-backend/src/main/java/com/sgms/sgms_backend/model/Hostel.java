@@ -12,7 +12,7 @@ public class Hostel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "hostel_id")
-    private Long hostelId;
+    private Integer hostelId;
 
     @Column(nullable = false)
     private String name;

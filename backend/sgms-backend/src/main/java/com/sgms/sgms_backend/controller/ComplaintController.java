@@ -32,7 +32,7 @@ public class ComplaintController {
     ========================================= */
     @PostMapping("/predict")
     @PreAuthorize("hasRole('STUDENT')")
-    public MLResponse predict(@RequestBody MLRequest request) {
+    public CategorySuggestionResponse predict(@RequestBody MLRequest request) {
 
         return complaintService.predict(request);
 
@@ -165,12 +165,14 @@ public class ComplaintController {
     @GetMapping("/categories")
     @PreAuthorize("isAuthenticated()")
     public List<CategoryDTO> getCategories() {
-        return categoryRepo.findAll()
+        return categoryRepo.findAllActiveWithDepartment()
                 .stream()
                 .map(c -> new CategoryDTO(
                         c.getCategoryId(),
                         c.getName(),
-                        c.getDepartment().getName()
+                        c.getDepartment().getName(),
+                        c.getDescription(),
+                        c.getDisplayOrder()
                 ))
                 .toList();
     }

@@ -13,7 +13,7 @@ import java.util.Optional;
 public interface StaffInfoRepository extends JpaRepository<StaffInfo, Long> {
 
     // staff login
-    Optional<StaffInfo> findByUser_UserId(Long userId);
+    Optional<StaffInfo> findByUser_UserId(Integer userId);
 
     /*
      ===============================
@@ -38,7 +38,7 @@ public interface StaffInfoRepository extends JpaRepository<StaffInfo, Long> {
      */
 
     Optional<StaffInfo> findByFloor_FloorIdAndRolesContains(
-            Long floorId,
+            Integer floorId,
             Role role
     );
 

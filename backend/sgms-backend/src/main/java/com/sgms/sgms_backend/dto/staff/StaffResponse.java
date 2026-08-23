@@ -9,7 +9,7 @@ import java.util.List;
 @AllArgsConstructor
 public class StaffResponse {
 
-    private Long staffId;
+    private Integer staffId;
 
     private String name;
 
@@ -23,7 +23,7 @@ public class StaffResponse {
     private Long divisionId;
     private String division;
 
-    private Long floorId;
+    private Integer floorId;
     private String floor;
 
     private List<Long> roleIds;

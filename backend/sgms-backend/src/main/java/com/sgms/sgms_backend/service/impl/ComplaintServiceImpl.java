@@ -2,14 +2,20 @@ package com.sgms.sgms_backend.service.impl;
 
 import com.sgms.sgms_backend.dto.*;
 import com.sgms.sgms_backend.enums.*;
+import com.sgms.sgms_backend.exception.ForbiddenException;
+import com.sgms.sgms_backend.exception.NotFoundException;
+import com.sgms.sgms_backend.exception.ValidationException;
 import com.sgms.sgms_backend.model.*;
 import com.sgms.sgms_backend.repository.*;
 import com.sgms.sgms_backend.service.ComplaintService;
 
 import com.sgms.sgms_backend.service.assignment.ComplaintAssignmentService;
 import com.sgms.sgms_backend.service.file.ComplaintFileService;
+import com.sgms.sgms_backend.service.resolution.CategoryResolutionService;
 import com.sgms.sgms_backend.service.timeline.ComplaintTimelineService;
 import com.sgms.sgms_backend.service.workflow.ComplaintWorkflowService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.nio.file.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -27,8 +33,15 @@ import java.util.*;
 @Transactional
 public class ComplaintServiceImpl implements ComplaintService {
 
+    private static final Logger log = LoggerFactory.getLogger(ComplaintServiceImpl.class);
+
     @Value("${ml.api.url}")
     private String mlApiUrl;
+
+    @Value("${ml.confidence.threshold:0.60}")
+    private double mlConfidenceThreshold;
+
+    private final RestTemplate restTemplate = new RestTemplate();
 
     private final UserRepository userRepo;
     private final StudentInfoRepository studentRepo;
@@ -42,6 +55,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final ComplaintWorkflowService workflowService;
     private final ComplaintFileService fileService;
     private final ComplaintTimelineService timelineService;
+    private final CategoryResolutionService categoryResolutionService;
 
 
     public ComplaintServiceImpl(
@@ -55,7 +69,8 @@ public class ComplaintServiceImpl implements ComplaintService {
             ComplaintAssignmentService assignmentService,
             ComplaintWorkflowService workflowService,
             ComplaintFileService fileService,
-            ComplaintTimelineService timelineService
+            ComplaintTimelineService timelineService,
+            CategoryResolutionService categoryResolutionService
     ) {
         this.userRepo = userRepo;
         this.studentRepo = studentRepo;
@@ -68,6 +83,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         this.workflowService = workflowService;
         this.fileService = fileService;
         this.timelineService = timelineService;
+        this.categoryResolutionService = categoryResolutionService;
     }
 
     /* =========================================
@@ -75,9 +91,28 @@ public class ComplaintServiceImpl implements ComplaintService {
     ========================================= */
 
     @Override
-    public MLResponse predict(MLRequest request) {
-        RestTemplate rest = new RestTemplate();
-        return rest.postForObject(mlApiUrl, request, MLResponse.class);
+    public CategorySuggestionResponse predict(MLRequest request) {
+        if (request == null) {
+            return categoryResolutionService.buildSuggestionResponse(null, null);
+        }
+
+        StudentInfo student = null;
+        try {
+            String email = getCurrentUserEmail();
+            student = studentRepo.findByUserEmailWithDepartment(email)
+                    .orElseGet(() -> studentRepo.findByUserEmail(email).orElse(null));
+        } catch (Exception e) {
+            log.warn("Could not load authenticated student context for prediction: {}", e.getMessage());
+        }
+
+        MLResponse mlResponse = null;
+        try {
+            mlResponse = restTemplate.postForObject(mlApiUrl, request, MLResponse.class);
+        } catch (Exception e) {
+            log.warn("ML service unavailable during predict: {}", e.getMessage());
+        }
+
+        return categoryResolutionService.buildSuggestionResponse(mlResponse, student);
     }
 
     /* =========================================
@@ -90,22 +125,31 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         String email = getCurrentUserEmail();
 
-        StudentInfo student = studentRepo.findByUserEmail(email)
-                .orElseThrow(() -> new RuntimeException("Student not found"));
+        StudentInfo student = studentRepo.findByUserEmailWithDepartment(email)
+                .orElseGet(() -> studentRepo.findByUserEmail(email)
+                        .orElseThrow(() -> new NotFoundException("Student not found")));
 
+        ComplaintCategory category;
         MLResponse mlResponse = null;
 
-        try {
-            RestTemplate rest = new RestTemplate();
-            mlResponse = rest.postForObject(
-                    mlApiUrl,
-                    new MLRequest(request.getDescription(), request.getTitle()),
-                    MLResponse.class
-            );
-        } catch (Exception ignored) {
+        if (request.getCategoryId() != null) {
+            // Explicit category supplied -> validate and use directly (NO ML call)
+            category = categoryResolutionService.validateAndResolveCategoryById(request.getCategoryId());
+        } else {
+            // Only call ML when categoryId is not provided
+            try {
+                mlResponse = restTemplate.postForObject(
+                        mlApiUrl,
+                        new MLRequest(request.getDescription(), request.getTitle()),
+                        MLResponse.class
+                );
+            } catch (Exception e) {
+                log.warn("ML service unavailable during complaint creation: {}", e.getMessage());
+            }
+
+            category = determineCategoryFromMl(mlResponse, student);
         }
 
-        ComplaintCategory category = determineCategory(request, mlResponse);
         Priority priority = determinePriority(request, mlResponse);
 
         Complaint complaint = new Complaint();
@@ -118,17 +162,42 @@ public class ComplaintServiceImpl implements ComplaintService {
         complaint.setStatus(ComplaintStatus.OPEN);
         complaint.setCurrentLevel(1);
 
+        // Persist ML prediction metadata for audit
+        if (mlResponse != null) {
+            complaint.setMlPredictedClass(mlResponse.getPredictedClass());
+            complaint.setMlPredictedPriority(mlResponse.getPredictedPriority());
+            if (mlResponse.getConfidence() > 0) {
+                complaint.setMlConfidence(
+                        BigDecimal.valueOf(mlResponse.getConfidence())
+                                  .setScale(4, java.math.RoundingMode.HALF_UP)
+                );
+            }
+        }
+
         Department department = category.getDepartment();
 
-        Workflow workflow = workflowService.getWorkflowForDepartment(department);
+        // Workflow lookup — graceful: if not configured, complaint is still created
+        Workflow workflow = null;
+        try {
+            workflow = workflowService.getWorkflowForDepartment(department);
+        } catch (Exception e) {
+            log.warn("No workflow configured for department '{}'. Complaint will be unassigned.",
+                    department.getName());
+        }
 
         complaint.setDepartment(department);
         complaint.setWorkflow(workflow);
 
-        StaffInfo assignedStaff =
-                assignmentService.assignStaff(complaint, 1);
+        // Staff assignment — graceful: if no matching staff found, complaint stays unassigned
+        StaffInfo assignedStaff = null;
+        if (workflow != null) {
+            try {
+                assignedStaff = assignmentService.assignStaff(complaint, 1);
+            } catch (Exception e) {
+                log.warn("Could not auto-assign staff for complaint: {}", e.getMessage());
+            }
+        }
 
-        complaint.setDepartment(department);
         complaint.setAssignedTo(assignedStaff);
 
         complaint = complaintRepo.save(complaint);
@@ -155,7 +224,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     public ComplaintResponse escalateComplaint(Long id, ActionRequest req) {
 
         Complaint complaint = complaintRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+                .orElseThrow(() -> new NotFoundException("Complaint not found"));
 
         validateStaffAccess(complaint);
 
@@ -172,7 +241,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         StaffInfo staff =
                 staffRepo.findFirstByRolesContains(role)
                         .orElseThrow(() ->
-                                new RuntimeException("Staff not found"));
+                                new NotFoundException("Staff not found"));
 
         ComplaintStatus oldStatus = complaint.getStatus();
 
@@ -204,7 +273,7 @@ public class ComplaintServiceImpl implements ComplaintService {
                                           ActionRequest req) {
 
         Complaint complaint = complaintRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+                .orElseThrow(() -> new NotFoundException("Complaint not found"));
 
         validateStaffAccess(complaint);
 
@@ -241,10 +310,10 @@ public class ComplaintServiceImpl implements ComplaintService {
     public ComplaintResponse assignStaff(Long id, Long staffId) {
 
         Complaint complaint = complaintRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+                .orElseThrow(() -> new NotFoundException("Complaint not found"));
 
         StaffInfo staff = staffRepo.findById(staffId)
-                .orElseThrow(() -> new RuntimeException("Staff not found"));
+                .orElseThrow(() -> new NotFoundException("Staff not found"));
 
         complaint.setAssignedTo(staff);
 
@@ -264,14 +333,27 @@ public class ComplaintServiceImpl implements ComplaintService {
     }
 
     /* =========================================
-       GET COMPLAINT TO GET COMPLAINT DETAILS
+       GET COMPLAINT — with IDOR protection
     ========================================= */
 
     @Override
     public ComplaintResponse getComplaintById(Long id) {
 
         Complaint complaint = complaintRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+                .orElseThrow(() -> new NotFoundException("Complaint not found"));
+
+        User currentUser = getCurrentUser();
+
+        // STUDENT can only view their own complaint
+        if (currentUser.getAccountType() == AccountType.STUDENT) {
+            StudentInfo student = studentRepo.findByUser_UserId(currentUser.getUserId())
+                    .orElseThrow(() -> new NotFoundException("Student not found"));
+
+            if (!complaint.getStudent().getStudentId().equals(student.getStudentId())) {
+                throw new ForbiddenException("Access denied: you can only view your own complaints");
+            }
+        }
+        // STAFF and ADMIN can view any complaint
 
         return mapToResponse(complaint);
     }
@@ -283,7 +365,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     @Override
     public List<ComplaintResponse> getStudentComplaints(Long studentId) {
 
-        return complaintRepo.findByStudentStudentId(studentId)
+        return complaintRepo.findByStudentStudentId(Math.toIntExact(studentId))
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -298,38 +380,53 @@ public class ComplaintServiceImpl implements ComplaintService {
         String email = getCurrentUserEmail();
 
         User user = userRepo.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
-        StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
-                .orElseThrow(() -> new RuntimeException("Staff not found"));
+        // Admin role: return all complaints (admin has no StaffInfo)
+        if (user.getAccountType() == AccountType.STAFF) {
+            StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
+                    .orElseThrow(() -> new NotFoundException("Staff profile not found"));
 
+            return complaintRepo
+                    .findByAssignedToStaffId(staff.getStaffId())
+                    .stream()
+                    .map(this::mapToResponse)
+                    .toList();
+        }
+
+        // For non-staff (admin) accessing this endpoint — return all
         return complaintRepo
-                .findByAssignedToStaffId(staff.getStaffId())
+                .findAllByOrderByCreatedAtDesc()
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
     }
+
     /* =========================================
        CATEGORY + PRIORITY HELPERS
     ========================================= */
 
-    private ComplaintCategory determineCategory(
-            ComplaintRequest req,
-            MLResponse ml) {
+    private ComplaintCategory determineCategoryFromMl(
+            MLResponse ml,
+            StudentInfo student) {
 
-        if (req.getCategoryId() != null) {
-            return categoryRepo.findById(req.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("Category not found"));
+        // Attempt ML resolution if confident
+        if (ml != null && ml.getPredictedClass() != null && ml.getConfidence() >= mlConfidenceThreshold) {
+            Long studentDeptId = (student != null && student.getAcademicDivision() != null && student.getAcademicDivision().getDepartment() != null)
+                    ? student.getAcademicDivision().getDepartment().getDepartmentId()
+                    : null;
+
+            Optional<ComplaintCategory> resolved = categoryResolutionService.resolveCategoryFromMlClass(
+                    ml.getPredictedClass(), studentDeptId
+            );
+
+            if (resolved.isPresent()) {
+                return resolved.get();
+            }
         }
 
-        if (ml != null && ml.getPredictedDepartment() != null) {
-            return categoryRepo
-                    .findByName(ml.getPredictedDepartment())
-                    .orElse(null);
-        }
-
-        return categoryRepo.findByName("GENERAL")
-                .orElseThrow(() -> new RuntimeException("Default category missing"));
+        // Fallback: No silent default, no GENERAL, no findFirst() -> require manual selection
+        throw new ValidationException("Category is required. Please select a valid complaint category.");
     }
 
     private Priority determinePriority(
@@ -342,37 +439,36 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         if (ml != null && ml.getPredictedPriority() != null) {
             try {
-                return Priority.valueOf(
-                        ml.getPredictedPriority().toUpperCase()
-                );
-            } catch (Exception ignored) {
+                return Priority.valueOf(ml.getPredictedPriority().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                log.warn("ML returned invalid priority '{}', defaulting to LOW", ml.getPredictedPriority());
             }
         }
-        System.out.println("Priority received: " + req.getPriority());
+
         return Priority.LOW;
     }
 
     /* =========================================
-           STUDENT FEEDBACK
-        ========================================= */
+       STUDENT FEEDBACK
+    ========================================= */
 
     @Override
     public ComplaintResponse studentFeedback(Long id, boolean accepted) {
 
         Complaint complaint = complaintRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Complaint not found"));
+                .orElseThrow(() -> new NotFoundException("Complaint not found"));
 
-        User currentUser=getCurrentUser();
+        User currentUser = getCurrentUser();
 
-        if(!complaint.getStudent().getUser().getUserId().equals(currentUser.getUserId())){
-            throw new RuntimeException("Unauthorized access");
+        if (!complaint.getStudent().getUser().getUserId().equals(currentUser.getUserId())) {
+            throw new ForbiddenException("You can only provide feedback on your own complaints");
         }
 
-        ComplaintStatus oldStatus = complaint.getStatus();
-        //  Only allow feedback when RESOLVED
         if (complaint.getStatus() != ComplaintStatus.RESOLVED) {
             throw new RuntimeException("Feedback allowed only after resolution");
         }
+
+        ComplaintStatus oldStatus = complaint.getStatus();
 
         if (accepted) {
             complaint.setStatus(ComplaintStatus.CLOSED);
@@ -387,36 +483,27 @@ public class ComplaintServiceImpl implements ComplaintService {
                 accepted ? ComplaintAction.STUDENT_ACCEPT : ComplaintAction.STUDENT_REJECT,
                 oldStatus,
                 complaint.getStatus(),
-                accepted ? "Student accepted resolution" : "Student rejected → reopened",
+                accepted ? "Student accepted resolution" : "Student rejected — reopened",
                 getCurrentUser()
         );
 
         return getComplaintById(id);
     }
 
-
-    private String getCurrentUserEmail() {
-
-        Authentication auth =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        return auth.getName();
-    }
-
     /* =========================================
        STUDENT VIEW OWN COMPLAINTS
-   ========================================= */
+    ========================================= */
     @Override
     public List<ComplaintResponse> getMyComplaints() {
 
         String email = getCurrentUserEmail();
 
         User user = userRepo.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         StudentInfo student =
                 studentRepo.findByUser_UserId(user.getUserId())
-                        .orElseThrow(() -> new RuntimeException("Student not found"));
+                        .orElseThrow(() -> new NotFoundException("Student not found"));
 
         return complaintRepo
                 .findByStudentStudentId(student.getStudentId())
@@ -426,8 +513,50 @@ public class ComplaintServiceImpl implements ComplaintService {
     }
 
     /* =========================================
-       TO GET COMPLAINT DETAILS
-   ========================================= */
+       ADMIN — get all complaints
+    ========================================= */
+    @Override
+    public List<ComplaintResponse> getAllComplaints() {
+
+        return complaintRepo
+                .findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ComplaintResponse> getComplaintsByStatus(ComplaintStatus status) {
+
+        return complaintRepo.findByStatus(status)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ComplaintResponse> getComplaintsByPriority(Priority priority) {
+
+        return complaintRepo.findByPriority(priority)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ComplaintResponse> getComplaintsByDepartment(Long departmentId) {
+
+        return complaintRepo
+                .findByDepartmentDepartmentId(departmentId)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    /* =========================================
+       MAPPING HELPERS
+    ========================================= */
+
     private ComplaintResponse mapToResponse(Complaint complaint) {
 
         List<String> files = complaintFileRepo
@@ -526,67 +655,27 @@ public class ComplaintServiceImpl implements ComplaintService {
 
             StaffInfo staff = staffRepo
                     .findByUser_UserId(user.getUserId())
-                    .orElseThrow(() -> new RuntimeException("Staff not found"));
+                    .orElseThrow(() -> new NotFoundException("Staff not found"));
 
             if (complaint.getAssignedTo() == null ||
                     !complaint.getAssignedTo().getStaffId().equals(staff.getStaffId())) {
 
-                throw new RuntimeException("You are not assigned to this complaint");
+                throw new ForbiddenException("You are not assigned to this complaint");
             }
         }
+    }
+
+    private String getCurrentUserEmail() {
+
+        Authentication auth =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        return auth.getName();
     }
 
     private User getCurrentUser() {
         String email = getCurrentUserEmail();
         return userRepo.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
     }
-
-    /* =========================================
-       ADMIN --> get all complaints
-   ========================================= */
-    @Override
-    public List<ComplaintResponse> getAllComplaints() {
-
-        return complaintRepo
-                .findAllByOrderByCreatedAtDesc()
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
-    }
-
-    @Override
-    public List<ComplaintResponse> getComplaintsByStatus(
-            ComplaintStatus status
-    ) {
-
-        return complaintRepo.findByStatus(status)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
-    }
-
-    @Override
-    public List<ComplaintResponse> getComplaintsByPriority(
-            Priority priority
-    ) {
-
-        return complaintRepo.findByPriority(priority)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
-    }
-
-
-    @Override
-    public List<ComplaintResponse> getComplaintsByDepartment(Long departmentId) {
-
-        return complaintRepo
-                .findByDepartmentDepartmentId(departmentId)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
-    }
-
-
 }

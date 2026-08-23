@@ -7,7 +7,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class FloorResponse {
 
-    private Long floorId;
+    private Integer floorId;
 
     private String floorNumber;
 }
