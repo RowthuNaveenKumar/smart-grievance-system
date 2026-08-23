@@ -1,46 +1,110 @@
-def predict_department(text: str) -> str:
-    text = text.lower()
+"""
+model.py — Inference layer for SGMS Department Classifier.
 
-    technical_keywords = ["wifi", "internet", "computer", "software", "network"]
-    exam_keywords = ["exam", "marks", "result", "internal","external"]
-    hostel_keywords = ["hostel", "mess", "food", "water","bed","tap","study_table"]
-    infrastructure_keywords = ["bench", "classroom"]
-    electrical_keywords = ["fan", "light","ac","projector"]
+Loads the trained TF-IDF + Logistic Regression model from model.pkl
+and provides predict() with real confidence values from predict_proba().
 
-    # Priority-based matching
-    if any(word in text for word in technical_keywords):
-        return "technical"
+The CONFIDENCE_THRESHOLD determines whether a prediction is considered
+reliable enough for automatic department selection or should prompt
+the user to confirm.
+"""
 
-    if any(word in text for word in exam_keywords):
-        return "exam_cell"
+import os
+import joblib
+import logging
 
-    if any(word in text for word in hostel_keywords):
-        return "hostel"
+from preprocess import combine_fields
 
-    if any(word in text for word in infrastructure_keywords):
-        return "infrastructure"
-    
-    if any(word in text for word in electrical_keywords):
-        return "electrical"
+logger = logging.getLogger(__name__)
 
-    return "general"
+# ──────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
 
-def predict_priority(text: str) -> str:
-    text = text.lower()
+# Confidence threshold for "high confidence" auto-selection.
+# Below this value, the frontend should prompt the user to confirm.
+CONFIDENCE_THRESHOLD = 0.60
 
-    if any(word in text for word in ["urgent", "immediately", "danger", "accident", "fire", "exposed"]):
-        return "High"
+# ──────────────────────────────────────────────────────────────────────────────
+# Model loading (lazy singleton)
+# ──────────────────────────────────────────────────────────────────────────────
+_pipeline = None
 
-    if any(word in text for word in ["not working", "broken", "issue", "problem"]):
-        return "Medium"
-    
-    if any(word in text for word in ["", "broken", "issue", "problem"]):
-        return "Low"
 
-def calculate_confidence(text: str) -> float:
-    text = text.lower()
+def _load_model():
+    """Load model from disk (once) and cache in module-level variable."""
+    global _pipeline
+    if _pipeline is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(
+                f"Model file not found: {MODEL_PATH}. "
+                f"Run train.py first to generate the model."
+            )
+        _pipeline = joblib.load(MODEL_PATH)
+        logger.info("ML model loaded from %s", MODEL_PATH)
+    return _pipeline
 
-    if any(word in text for word in ["urgent", "danger", "accident", "fire"]):
-        return 0.92
 
-    return 0.78
+def is_model_ready() -> bool:
+    """Check whether the model file exists and is loadable."""
+    if not os.path.exists(MODEL_PATH):
+        return False
+    try:
+        _load_model()
+        return True
+    except Exception:
+        return False
+
+
+def predict(title: str, description: str) -> dict:
+    """
+    Predict the ML class for a complaint.
+
+    Parameters
+    ----------
+    title : str
+        Complaint title
+    description : str
+        Complaint description
+
+    Returns
+    -------
+    dict with keys:
+        predicted_class    : str | None — Uppercase ML class matching ml_class_config
+        confidence         : float      — Probability [0.0–1.0] from model
+        high_confidence    : bool       — True if confidence >= CONFIDENCE_THRESHOLD
+        predicted_priority : str        — "LOW" for empty, "MEDIUM" default
+    """
+    pipeline = _load_model()
+
+    # Combine and preprocess using the SAME pipeline as training (2x title weighting preserved)
+    text = combine_fields(title, description)
+
+    if not text.strip():
+        logger.warning("Empty text after preprocessing. Returning fallback.")
+        return {
+            "predicted_class": None,
+            "confidence": 0.0,
+            "high_confidence": False,
+            "predicted_priority": "LOW",
+        }
+
+    # Predict with probabilities
+    proba = pipeline.predict_proba([text])[0]
+    classes = pipeline.classes_
+
+    best_idx = proba.argmax()
+    predicted_cls = classes[best_idx]
+    confidence = float(proba[best_idx])
+
+    # All probabilities per class (for debugging/logging)
+    proba_map = {cls: round(float(p), 4) for cls, p in zip(classes, proba)}
+    logger.debug("Prediction probabilities: %s", proba_map)
+
+    return {
+        "predicted_class": predicted_cls,                # e.g. "HOSTEL"
+        "confidence": round(confidence, 4),               # e.g. 0.8742
+        "high_confidence": confidence >= CONFIDENCE_THRESHOLD,
+        "predicted_priority": "MEDIUM",                   # Not modelled — safe default
+    }
