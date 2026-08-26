@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="sgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+
+    <!-- Gloss Highlight -->
+    <linearGradient id="glossGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Drop Shadow Filter -->
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.5" />
+    </filter>
+
+    <filter id="iconShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#1e1b4b" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <!-- Base Rounded Container (Squircle) -->
+  <rect x="24" y="24" width="464" height="464" rx="128" fill="url(#sgGradient)" filter="url(#dropShadow)" />
+  
+  <!-- Subtle Border Ring -->
+  <rect x="24" y="24" width="464" height="464" rx="128" fill="none" stroke="#ffffff" stroke-width="8" stroke-opacity="0.25" />
+
+  <!-- Top Gloss Reflection -->
+  <path d="M 24 152 C 24 81 81 24 152 24 L 360 24 C 431 24 488 81 488 152 C 488 200 400 240 256 240 C 112 240 24 200 24 152 Z" fill="url(#glossGrad)" />
+
+  <!-- Shield Shape -->
+  <g filter="url(#iconShadow)">
+    <path d="M 256 100 C 310 100 370 120 370 120 C 370 240 330 340 256 400 C 182 340 142 240 142 120 C 142 120 202 100 256 100 Z" 
+          fill="none" 
+          stroke="#ffffff" 
+          stroke-width="26" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+
+    <!-- Checkmark Inside Shield -->
+    <path d="M 200 248 L 242 290 L 320 200" 
+          fill="none" 
+          stroke="#ffffff" 
+          stroke-width="28" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+  </g>
+</svg>
