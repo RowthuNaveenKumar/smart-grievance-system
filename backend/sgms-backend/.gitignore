@@ -1,0 +1,26 @@
+# Target & Build Output
+target/
+out/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+.env_sen
+*.pem
+*.key
+credentials*
+secrets*
+
+# Logs & Temporary Files
+*.log
+logs/
+uploads/
+hs_err_pid*
+replay_pid*
+
+# IDE & OS Files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
