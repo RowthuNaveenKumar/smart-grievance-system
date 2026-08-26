@@ -1,0 +1,46 @@
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.so
+
+# Secrets & Environment Configurations
+.env
+.env.*
+!.env.example
+.env_sen
+*.pem
+*.key
+secrets*
+credentials*
+
+# ML Experiments & Backups (Local artifacts only)
+deployment_backups/
+experiments/
+model_production_baseline_*.pkl
+candidate_model*.pkl
+*candidate*.csv
+needs_review_rows.csv
+
+# Build & Test outputs
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+logs/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
