@@ -407,7 +407,11 @@ export default function StaffDashboard() {
                 >
                   <ComplaintCard
                     complaint={c}
-                    onClick={() => navigate(`/complaint/${c.complaintId}`)}
+                    onClick={() =>
+                      navigate(`/complaint/${c.complaintId}`, {
+                        state: { from: "staff-dashboard" },
+                      })
+                    }
                   />
                 </motion.div>
               ))}

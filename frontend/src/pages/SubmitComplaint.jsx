@@ -145,7 +145,9 @@ export default function SubmitComplaint() {
         },
       });
 
-      navigate(`/complaint/${res.data.complaintId}`);
+      navigate(`/complaint/${res.data.complaintId}`, {
+        state: { from: "submission" },
+      });
     } catch (err) {
       console.error("Complaint submission failed:", err);
       alert(

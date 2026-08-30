@@ -161,7 +161,11 @@ export default function StudentDashboard() {
 
                 <Button
                   variant="outline"
-                  onClick={() => navigate("/my-complaints")}
+                  onClick={() =>
+                    document
+                      .getElementById("complaints-section")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
                   className="h-12 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10"
                 >
                   View All Complaints
@@ -374,6 +378,7 @@ export default function StudentDashboard() {
 
         {/* Complaints */}
         <motion.div
+          id="complaints-section"
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9 }}
@@ -408,7 +413,11 @@ export default function StudentDashboard() {
                 >
                   <ComplaintCard
                     complaint={c}
-                    onClick={() => navigate(`/complaint/${c.complaintId}`)}
+                    onClick={() =>
+                      navigate(`/complaint/${c.complaintId}`, {
+                        state: { from: "student-dashboard" },
+                      })
+                    }
                   />
                 </motion.div>
               ))}
