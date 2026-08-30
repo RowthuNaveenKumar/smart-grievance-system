@@ -47,6 +47,7 @@ class ComplaintServiceImplTest {
     @Mock ComplaintCategoryRepository categoryRepo;
     @Mock ComplaintUpdateRepository updateRepo;
     @Mock ComplaintFileRepository complaintFileRepo;
+    @Mock DepartmentRepository departmentRepo;
     @Mock ComplaintAssignmentService assignmentService;
     @Mock ComplaintWorkflowService workflowService;
     @Mock ComplaintFileService fileService;
@@ -349,6 +350,148 @@ class ComplaintServiceImplTest {
         verify(restTemplate, times(1)).postForObject(anyString(), any(), eq(MLResponse.class));
         assertThat(result).isNotNull();
         assertThat(result.getCategoryId()).isEqualTo(1L);
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       PHASE 10A: OVERRIDE & REASSIGNMENT TESTS
+    ───────────────────────────────────────────────────────────── */
+
+    @Test
+    void overrideDepartment_success_preservesMLPredictionAndLogsAudit() {
+        mockSecurityContext("admin@test.com");
+        User adminUser = new User();
+        adminUser.setUserId(1);
+        adminUser.setEmail("admin@test.com");
+        adminUser.setAccountType(AccountType.STAFF);
+        when(userRepo.findByEmail("admin@test.com")).thenReturn(Optional.of(adminUser));
+
+        Department targetDept = new Department();
+        targetDept.setDepartmentId(8L);
+        targetDept.setName("Administration");
+        targetDept.setActive(true);
+
+        ComplaintCategory targetCat = new ComplaintCategory();
+        targetCat.setCategoryId(8L);
+        targetCat.setName("ADMIN");
+        targetCat.setMlClass("ADMIN");
+        targetCat.setActive(true);
+        targetCat.setDepartment(targetDept);
+
+        complaint.setMlPredictedClass("HOSTEL");
+        complaint.setMlConfidence(java.math.BigDecimal.valueOf(0.91));
+        complaint.setStatus(ComplaintStatus.IN_PROGRESS);
+
+        when(complaintRepo.findById(100L)).thenReturn(Optional.of(complaint));
+        when(departmentRepo.findById(8L)).thenReturn(Optional.of(targetDept));
+        when(categoryRepo.findByDepartment_DepartmentIdAndActiveTrue(8L)).thenReturn(List.of(targetCat));
+        when(complaintRepo.save(any(Complaint.class))).thenAnswer(i -> i.getArgument(0));
+
+        OverrideDepartmentRequest req = new OverrideDepartmentRequest(8L, null, "Relocated to central admin building");
+        ComplaintResponse resp = service.overrideDepartment(100L, req);
+
+        assertThat(resp).isNotNull();
+        assertThat(resp.getDepartment()).isEqualTo("Administration");
+        assertThat(resp.getDepartmentId()).isEqualTo(8L);
+        assertThat(resp.getAdminOverrideNote()).isEqualTo("Relocated to central admin building");
+
+        // PROVE IMMUTABILITY: ML prediction and confidence unchanged!
+        assertThat(resp.getMlPredictedClass()).isEqualTo("HOSTEL");
+        assertThat(resp.getMlConfidence()).isEqualTo(0.91);
+
+        // PROVE LIFECYCLE: Status remains IN_PROGRESS (unchanged)
+        assertThat(resp.getStatus()).isEqualTo("IN_PROGRESS");
+
+        // Verify ComplaintUpdate audit log was saved with ADMIN_OVERRIDE action
+        ArgumentCaptor<ComplaintUpdate> updateCaptor = ArgumentCaptor.forClass(ComplaintUpdate.class);
+        verify(updateRepo, times(1)).save(updateCaptor.capture());
+        ComplaintUpdate savedUpdate = updateCaptor.getValue();
+        assertThat(savedUpdate.getAction()).isEqualTo(ComplaintAction.ADMIN_OVERRIDE);
+        assertThat(savedUpdate.getNote()).contains("Relocated to central admin building");
+        assertThat(savedUpdate.getPerformedBy()).isEqualTo(adminUser);
+    }
+
+    @Test
+    void overrideDepartment_blankReason_throwsValidationException() {
+        OverrideDepartmentRequest req = new OverrideDepartmentRequest(8L, null, "   ");
+        assertThatThrownBy(() -> service.overrideDepartment(100L, req))
+                .isInstanceOf(com.sgms.sgms_backend.exception.ValidationException.class)
+                .hasMessageContaining("reason note is required");
+    }
+
+    @Test
+    void overrideDepartment_inactiveDepartment_throwsValidationException() {
+        Department inactiveDept = new Department();
+        inactiveDept.setDepartmentId(99L);
+        inactiveDept.setName("Old Inactive Dept");
+        inactiveDept.setActive(false);
+
+        when(complaintRepo.findById(100L)).thenReturn(Optional.of(complaint));
+        when(departmentRepo.findById(99L)).thenReturn(Optional.of(inactiveDept));
+
+        OverrideDepartmentRequest req = new OverrideDepartmentRequest(99L, null, "Transfer request");
+        assertThatThrownBy(() -> service.overrideDepartment(100L, req))
+                .isInstanceOf(com.sgms.sgms_backend.exception.ValidationException.class)
+                .hasMessageContaining("inactive");
+    }
+
+    @Test
+    void reassignStaff_success_preservesStatusAndLogsAudit() {
+        mockSecurityContext("admin@test.com");
+        User adminUser = new User();
+        adminUser.setUserId(1);
+        adminUser.setEmail("admin@test.com");
+        when(userRepo.findByEmail("admin@test.com")).thenReturn(Optional.of(adminUser));
+
+        StaffInfo newStaff = new StaffInfo();
+        newStaff.setStaffId(50);
+        newStaff.setName("Warden Bob");
+        newStaff.setDepartment(department); // Same department (Hostel)
+        User staffUser = new User();
+        staffUser.setEnabled(true);
+        newStaff.setUser(staffUser);
+
+        complaint.setStatus(ComplaintStatus.IN_PROGRESS);
+
+        when(complaintRepo.findById(100L)).thenReturn(Optional.of(complaint));
+        when(staffRepo.findById(50L)).thenReturn(Optional.of(newStaff));
+        when(complaintRepo.save(any(Complaint.class))).thenAnswer(i -> i.getArgument(0));
+
+        ReassignStaffRequest req = new ReassignStaffRequest(50L, "Shift rotation");
+        ComplaintResponse resp = service.reassignStaff(100L, req);
+
+        assertThat(resp).isNotNull();
+        assertThat(resp.getAssignedTo()).isEqualTo("Warden Bob");
+        assertThat(resp.getStatus()).isEqualTo("IN_PROGRESS");
+
+        // Verify ComplaintUpdate audit record
+        ArgumentCaptor<ComplaintUpdate> updateCaptor = ArgumentCaptor.forClass(ComplaintUpdate.class);
+        verify(updateRepo, times(1)).save(updateCaptor.capture());
+        ComplaintUpdate savedUpdate = updateCaptor.getValue();
+        assertThat(savedUpdate.getAction()).isEqualTo(ComplaintAction.STAFF_REASSIGN);
+        assertThat(savedUpdate.getNote()).contains("Shift rotation");
+    }
+
+    @Test
+    void reassignStaff_differentDepartment_throwsValidationException() {
+        Department diffDept = new Department();
+        diffDept.setDepartmentId(99L);
+        diffDept.setName("Different Dept");
+
+        StaffInfo diffStaff = new StaffInfo();
+        diffStaff.setStaffId(60);
+        diffStaff.setName("Prof. Diff");
+        diffStaff.setDepartment(diffDept);
+        User staffUser = new User();
+        staffUser.setEnabled(true);
+        diffStaff.setUser(staffUser);
+
+        when(complaintRepo.findById(100L)).thenReturn(Optional.of(complaint));
+        when(staffRepo.findById(60L)).thenReturn(Optional.of(diffStaff));
+
+        ReassignStaffRequest req = new ReassignStaffRequest(60L, "Invalid reassign");
+        assertThatThrownBy(() -> service.reassignStaff(100L, req))
+                .isInstanceOf(com.sgms.sgms_backend.exception.ValidationException.class)
+                .hasMessageContaining("belongs to department");
     }
 
     /* ─────────────────────────────────────────────────────────────

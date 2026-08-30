@@ -8,7 +8,9 @@ public enum ComplaintAction {
     ESCALATE,
     STUDENT_ACCEPT,
     STUDENT_REJECT,
-    UPDATE_NOTE;
+    UPDATE_NOTE,
+    ADMIN_OVERRIDE,
+    STAFF_REASSIGN;
 
     public ComplaintStatus toStatus() {
 
@@ -18,7 +20,7 @@ public enum ComplaintAction {
 
             case MARK_IN_PROGRESS -> ComplaintStatus.IN_PROGRESS;
 
-            case UPDATE_NOTE -> null;
+            case UPDATE_NOTE, ADMIN_OVERRIDE, STAFF_REASSIGN -> null;
 
             case RESOLVE -> ComplaintStatus.RESOLVED;
 

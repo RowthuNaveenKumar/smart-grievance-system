@@ -31,9 +31,9 @@ public class ComplaintAssignmentService {
     public StaffInfo assignStaff(Complaint complaint, Integer level) {
 
         Workflow workflow =
-                workflowRepo.findByDepartmentDepartmentId(
+                workflowRepo.findByDepartmentDepartmentIdAndActiveTrue(
                                 complaint.getDepartment().getDepartmentId())
-                        .orElseThrow(() -> new RuntimeException("Workflow not found for department: "
+                        .orElseThrow(() -> new RuntimeException("Active workflow not found for department: "
                                 + complaint.getDepartment().getName()));
 
         WorkflowStep step =

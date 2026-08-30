@@ -4,14 +4,21 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.sgms.sgms_backend.enums.ComplaintAction;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "complaint_updates")
+@ToString(exclude = {
+        "complaint",
+        "performedBy"
+})
 public class ComplaintUpdate {
 
     @Id

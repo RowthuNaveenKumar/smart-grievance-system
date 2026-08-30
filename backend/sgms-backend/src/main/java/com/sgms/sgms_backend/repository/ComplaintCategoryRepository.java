@@ -14,50 +14,68 @@ public interface ComplaintCategoryRepository extends JpaRepository<ComplaintCate
 
     Optional<ComplaintCategory> findByName(String name);
 
-    /**
-     * Eagerly fetches Department in the same query to avoid LazyInitializationException
-     * when accessing category.getDepartment().getName() outside a transaction.
-     */
     @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department ORDER BY c.categoryId")
     List<ComplaintCategory> findAllWithDepartment();
 
     @Query("SELECT DISTINCT c.name FROM ComplaintCategory c")
     List<String> findDistinctCategoryNames();
 
-    // ─── Phase 2 additions ──────────────────────────────────────────────────
-
-    /**
-     * Used by STUDENT_DEPT resolution: finds the single active category for a given
-     * ml_class within a specific department. Returns empty if the department has no
-     * active category for that ML class (e.g. dept not yet configured).
-     */
     @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department d " +
            "WHERE c.mlClass = :mlClass AND d.departmentId = :departmentId AND c.active = true")
     List<ComplaintCategory> findByMlClassAndDepartmentIdAndActiveTrue(
             @Param("mlClass") String mlClass,
             @Param("departmentId") Long departmentId);
 
-    /**
-     * Used by DIRECT_SINGLE resolution: finds ALL active categories for a given ml_class.
-     * Exactly one result is expected. Zero = configuration error. More than one = data error.
-     */
     @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department " +
            "WHERE c.mlClass = :mlClass AND c.active = true")
     List<ComplaintCategory> findByMlClassAndActiveTrue(@Param("mlClass") String mlClass);
 
-    /**
-     * Returns all active categories with their departments eagerly loaded.
-     * Used by GET /complaint-categories to populate the student dropdown.
-     * Filters out inactive categories and categories in inactive departments.
-     */
     @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department d " +
            "WHERE c.active = true AND d.active = true " +
            "ORDER BY c.displayOrder ASC, c.name ASC")
     List<ComplaintCategory> findAllActiveWithDepartment();
 
-    /**
-     * Checks whether a category ID exists AND is active.
-     * Used during manual category validation in complaint submission.
-     */
+    @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department d " +
+           "WHERE d.departmentId = :departmentId AND c.active = true")
+    List<ComplaintCategory> findByDepartment_DepartmentIdAndActiveTrue(@Param("departmentId") Long departmentId);
+
+    List<ComplaintCategory> findByDepartment_DepartmentId(Long departmentId);
+
     boolean existsByCategoryIdAndActiveTrue(Long categoryId);
+
+    // -----------------------------------------------------------------------
+    // Phase 10C: Category Admin Management
+    // -----------------------------------------------------------------------
+
+    /** All categories across all departments, ordered for admin listing */
+    @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department d " +
+           "ORDER BY d.name ASC, c.displayOrder ASC, c.name ASC")
+    List<ComplaintCategory> findAllWithDepartmentOrdered();
+
+    /** All categories for a department (active + inactive), ordered */
+    @Query("SELECT c FROM ComplaintCategory c JOIN FETCH c.department d " +
+           "WHERE d.departmentId = :departmentId " +
+           "ORDER BY c.displayOrder ASC, c.name ASC")
+    List<ComplaintCategory> findByDepartment_DepartmentIdOrdered(@Param("departmentId") Long departmentId);
+
+    /** Case-insensitive duplicate check within a department (for create) */
+    @Query("SELECT COUNT(c) > 0 FROM ComplaintCategory c " +
+           "WHERE LOWER(c.name) = LOWER(:name) AND c.department.departmentId = :departmentId")
+    boolean existsByNameIgnoreCaseAndDepartmentDepartmentId(
+            @Param("name") String name,
+            @Param("departmentId") Long departmentId);
+
+    /** Case-insensitive duplicate check excluding current record (for update) */
+    @Query("SELECT COUNT(c) > 0 FROM ComplaintCategory c " +
+           "WHERE LOWER(c.name) = LOWER(:name) " +
+           "AND c.department.departmentId = :departmentId " +
+           "AND c.categoryId <> :excludeId")
+    boolean existsByNameIgnoreCaseAndDepartmentDepartmentIdAndCategoryIdNot(
+            @Param("name") String name,
+            @Param("departmentId") Long departmentId,
+            @Param("excludeId") Long excludeId);
+
+    /** Count of complaints referencing a given category (for admin display) */
+    @Query("SELECT COUNT(comp) FROM Complaint comp WHERE comp.category.categoryId = :categoryId")
+    int countComplaintsByCategoryId(@Param("categoryId") Long categoryId);
 }

@@ -3,7 +3,9 @@ package com.sgms.sgms_backend.model;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import com.sgms.sgms_backend.enums.Priority;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -13,9 +15,19 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "complaints")
+@ToString(exclude = {
+        "student",
+        "assignedTo",
+        "category",
+        "department",
+        "workflow",
+        "updates",
+        "files"
+})
 public class Complaint {
 
     @Id
@@ -38,18 +50,18 @@ public class Complaint {
     private String description;
 
     @ManyToOne
-    @JoinColumn(name="category_id")
+    @JoinColumn(name = "category_id")
     private ComplaintCategory category;
 
     @ManyToOne
-    @JoinColumn(name="department_id")
+    @JoinColumn(name = "department_id")
     private Department department;
 
     @ManyToOne
-    @JoinColumn(name="workflow_id")
+    @JoinColumn(name = "workflow_id")
     private Workflow workflow;
 
-    @Column(name="current_level")
+    @Column(name = "current_level")
     private Integer currentLevel;
 
     @Column(name = "ml_predicted_category")
@@ -64,6 +76,9 @@ public class Complaint {
 
     @Column(name = "ml_confidence")
     private BigDecimal mlConfidence;
+
+    @Column(name = "admin_override_note", columnDefinition = "TEXT")
+    private String adminOverrideNote;
 
     @Column(name = "escalation_level")
     private Integer escalationLevel = 1;

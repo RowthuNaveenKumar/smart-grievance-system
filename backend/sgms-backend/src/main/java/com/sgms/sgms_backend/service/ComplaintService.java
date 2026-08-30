@@ -46,5 +46,11 @@ public interface ComplaintService {
 
     List<ComplaintResponse> getComplaintsByDepartment(Long departmentId);
 
+    /* =========================================
+        ADMIN --> OVERRIDE & REASSIGNMENT
+    ========================================= */
+    ComplaintResponse overrideDepartment(Long id, OverrideDepartmentRequest req);
+
+    ComplaintResponse reassignStaff(Long id, ReassignStaffRequest req);
 
 }

@@ -214,4 +214,26 @@ public class ComplaintController {
         );
     }
 
+    /* =========================================
+       ADMIN ---> OVERRIDE & REASSIGNMENT
+    ========================================= */
+
+    @PatchMapping("/{id}/override-department")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ComplaintResponse overrideDepartment(
+            @PathVariable Long id,
+            @RequestBody @jakarta.validation.Valid OverrideDepartmentRequest req
+    ) {
+        return complaintService.overrideDepartment(id, req);
+    }
+
+    @PatchMapping("/{id}/reassign-staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ComplaintResponse reassignStaff(
+            @PathVariable Long id,
+            @RequestBody @jakarta.validation.Valid ReassignStaffRequest req
+    ) {
+        return complaintService.reassignStaff(id, req);
+    }
+
 }

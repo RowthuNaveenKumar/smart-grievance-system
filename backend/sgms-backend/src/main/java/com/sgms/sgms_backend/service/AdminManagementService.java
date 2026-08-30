@@ -34,6 +34,8 @@ public interface AdminManagementService {
 
     StatusResponse disableStaff(Long staffId);
 
+    List<StaffResponse> getStaffByDepartment(Long departmentId);
+
     /* =========================================
        Dashboard Stats
     ========================================= */

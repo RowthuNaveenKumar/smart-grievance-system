@@ -8,7 +8,7 @@ public class PasswordGenerator {
 
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
-        String rawPassword = "123456";
+        String rawPassword = args.length > 0 ? args[0] : System.getenv().getOrDefault("RAW_PASSWORD_TO_ENCODE", "sample_password");
 
         String encodedPassword = encoder.encode(rawPassword);
 

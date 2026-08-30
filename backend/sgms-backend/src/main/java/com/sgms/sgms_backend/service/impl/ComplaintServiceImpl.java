@@ -50,6 +50,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final ComplaintCategoryRepository categoryRepo;
     private final ComplaintUpdateRepository updateRepo;
     private final ComplaintFileRepository complaintFileRepo;
+    private final DepartmentRepository departmentRepo;
 
     private final ComplaintAssignmentService assignmentService;
     private final ComplaintWorkflowService workflowService;
@@ -66,6 +67,7 @@ public class ComplaintServiceImpl implements ComplaintService {
             ComplaintCategoryRepository categoryRepo,
             ComplaintUpdateRepository updateRepo,
             ComplaintFileRepository complaintFileRepo,
+            DepartmentRepository departmentRepo,
             ComplaintAssignmentService assignmentService,
             ComplaintWorkflowService workflowService,
             ComplaintFileService fileService,
@@ -79,6 +81,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         this.categoryRepo = categoryRepo;
         this.updateRepo = updateRepo;
         this.complaintFileRepo = complaintFileRepo;
+        this.departmentRepo = departmentRepo;
         this.assignmentService = assignmentService;
         this.workflowService = workflowService;
         this.fileService = fileService;
@@ -554,6 +557,163 @@ public class ComplaintServiceImpl implements ComplaintService {
     }
 
     /* =========================================
+       ADMIN --> OVERRIDE & REASSIGNMENT
+    ========================================= */
+
+    @Override
+    @Transactional
+    public ComplaintResponse overrideDepartment(Long id, OverrideDepartmentRequest req) {
+        if (id == null) {
+            throw new ValidationException("Complaint ID is required");
+        }
+        if (req == null || req.getDepartmentId() == null) {
+            throw new ValidationException("Target department ID is required");
+        }
+        if (req.getNote() == null || req.getNote().trim().isEmpty()) {
+            throw new ValidationException("Override justification reason note is required");
+        }
+
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Complaint not found with id: " + id));
+
+        Department targetDept = departmentRepo.findById(req.getDepartmentId())
+                .orElseThrow(() -> new NotFoundException("Target department not found with id: " + req.getDepartmentId()));
+
+        if (!targetDept.isActive()) {
+            throw new ValidationException("Target department is inactive: " + targetDept.getName());
+        }
+
+        ComplaintCategory targetCategory = null;
+        if (req.getCategoryId() != null) {
+            ComplaintCategory explicitCat = categoryRepo.findById(req.getCategoryId())
+                    .orElseThrow(() -> new NotFoundException("Target category not found with id: " + req.getCategoryId()));
+
+            if (!explicitCat.isActive()) {
+                throw new ValidationException("Target category is inactive");
+            }
+            if (explicitCat.getDepartment() == null || !explicitCat.getDepartment().getDepartmentId().equals(targetDept.getDepartmentId())) {
+                throw new ValidationException("Selected category does not belong to target department: " + targetDept.getName());
+            }
+            targetCategory = explicitCat;
+        } else {
+            // Attempt resolving matching category for target department
+            List<ComplaintCategory> deptCategories = categoryRepo.findByDepartment_DepartmentIdAndActiveTrue(targetDept.getDepartmentId());
+            if (!deptCategories.isEmpty()) {
+                String predictedClass = complaint.getMlPredictedClass();
+                if (predictedClass != null) {
+                    targetCategory = deptCategories.stream()
+                            .filter(c -> predictedClass.equalsIgnoreCase(c.getMlClass()))
+                            .findFirst()
+                            .orElse(deptCategories.get(0));
+                } else {
+                    targetCategory = deptCategories.get(0);
+                }
+            }
+        }
+
+        String oldDeptName = complaint.getDepartment() != null ? complaint.getDepartment().getName() : "Unassigned";
+        String newDeptName = targetDept.getName();
+        String oldCatName = complaint.getCategory() != null ? complaint.getCategory().getName() : "None";
+        String newCatName = targetCategory != null ? targetCategory.getName() : "None";
+
+        // Operational routing updates
+        complaint.setDepartment(targetDept);
+        complaint.setCategory(targetCategory);
+        complaint.setAdminOverrideNote(req.getNote().trim());
+
+        // Note: mlPredictedClass, mlConfidence, mlPredictedPriority remain untouched (IMMUTABLE AUDIT)
+
+        User currentUser = getCurrentUser();
+
+        ComplaintUpdate update = new ComplaintUpdate();
+        update.setComplaint(complaint);
+        update.setPerformedBy(currentUser);
+        update.setAction(ComplaintAction.ADMIN_OVERRIDE);
+        update.setFromStatus(complaint.getStatus());
+        update.setToStatus(complaint.getStatus()); // Status remains unchanged
+        update.setNote(String.format("Admin Department Override: '%s' -> '%s' (Category: '%s' -> '%s'). Reason: %s",
+                oldDeptName, newDeptName, oldCatName, newCatName, req.getNote().trim()));
+
+        updateRepo.save(update);
+        complaint = complaintRepo.save(complaint);
+
+        log.info("Complaint #{} department overridden from '{}' to '{}' by admin '{}'. ML prediction '{}' preserved.",
+                id, oldDeptName, newDeptName, currentUser.getEmail(), complaint.getMlPredictedClass());
+
+        return mapToResponse(complaint);
+    }
+
+    @Override
+    @Transactional
+    public ComplaintResponse reassignStaff(Long id, ReassignStaffRequest req) {
+        if (id == null) {
+            throw new ValidationException("Complaint ID is required");
+        }
+        if (req == null || req.getStaffId() == null) {
+            throw new ValidationException("Target staff ID is required");
+        }
+
+        Complaint complaint = complaintRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Complaint not found with id: " + id));
+
+        StaffInfo targetStaff = staffRepo.findById(req.getStaffId())
+                .orElseThrow(() -> new NotFoundException("Target staff not found with id: " + req.getStaffId()));
+
+        if (targetStaff.getUser() == null || !targetStaff.getUser().isEnabled()) {
+            throw new ValidationException("Target staff account is disabled");
+        }
+
+        // Validate staff belongs to the complaint's current department (or is global admin)
+        boolean isGlobalAdmin = targetStaff.getRoles() != null && targetStaff.getRoles().stream()
+                .anyMatch(r -> r.getAssignmentScope() == AssignmentScope.GLOBAL || "ADMIN".equalsIgnoreCase(r.getRoleName()));
+
+        if (!isGlobalAdmin) {
+            if (complaint.getDepartment() == null) {
+                throw new ValidationException("Complaint has no assigned department. Please assign a department first.");
+            }
+            if (targetStaff.getDepartment() == null ||
+                    !targetStaff.getDepartment().getDepartmentId().equals(complaint.getDepartment().getDepartmentId())) {
+                String staffDeptName = targetStaff.getDepartment() != null ? targetStaff.getDepartment().getName() : "None";
+                throw new ValidationException(String.format("Staff '%s' belongs to department '%s', but complaint is in '%s'",
+                        targetStaff.getName(), staffDeptName, complaint.getDepartment().getName()));
+            }
+        }
+
+        if (complaint.getAssignedTo() != null &&
+                complaint.getAssignedTo().getStaffId().equals(targetStaff.getStaffId())) {
+            throw new ValidationException(String.format("Complaint is already assigned to staff '%s'", targetStaff.getName()));
+        }
+
+        String oldStaffName = complaint.getAssignedTo() != null ? complaint.getAssignedTo().getName() : "Unassigned";
+        String newStaffName = targetStaff.getName();
+
+        complaint.setAssignedTo(targetStaff);
+
+        User currentUser = getCurrentUser();
+
+        ComplaintUpdate update = new ComplaintUpdate();
+        update.setComplaint(complaint);
+        update.setPerformedBy(currentUser);
+        update.setAction(ComplaintAction.STAFF_REASSIGN);
+        update.setFromStatus(complaint.getStatus());
+        update.setToStatus(complaint.getStatus()); // Status remains unchanged
+
+        String noteText = (req.getNote() != null && !req.getNote().trim().isEmpty())
+                ? String.format("Staff reassigned from '%s' to '%s'. Note: %s", oldStaffName, newStaffName, req.getNote().trim())
+                : String.format("Staff reassigned from '%s' to '%s'", oldStaffName, newStaffName);
+
+        update.setNote(noteText);
+
+        updateRepo.save(update);
+        complaint = complaintRepo.save(complaint);
+
+        log.info("Complaint #{} staff reassigned from '{}' to '{}' by admin '{}'",
+                id, oldStaffName, newStaffName, currentUser.getEmail());
+
+        return mapToResponse(complaint);
+    }
+
+    /* =========================================
        MAPPING HELPERS
     ========================================= */
 
@@ -591,14 +751,44 @@ public class ComplaintServiceImpl implements ComplaintService {
                                 .build())
                         .toList();
 
+        String studentName = null;
+        if (complaint.getStudent() != null) {
+            studentName = complaint.getStudent().getName();
+        }
+
+        String assignedStaffEmail = null;
+        Long assignedStaffId = null;
+        if (complaint.getAssignedTo() != null) {
+            assignedStaffId = complaint.getAssignedTo().getStaffId() != null
+                    ? Long.valueOf(complaint.getAssignedTo().getStaffId())
+                    : null;
+            assignedStaffEmail = complaint.getAssignedTo().getEmail();
+        }
+
         return ComplaintResponse.builder()
                 .complaintId(complaint.getComplaintId())
                 .title(complaint.getTitle())
                 .description(complaint.getDescription())
 
+                .categoryId(
+                        complaint.getCategory() != null
+                                ? complaint.getCategory().getCategoryId()
+                                : null
+                )
                 .category(
                         complaint.getCategory() != null
                                 ? complaint.getCategory().getName()
+                                : null
+                )
+
+                .departmentId(
+                        complaint.getDepartment() != null
+                                ? complaint.getDepartment().getDepartmentId()
+                                : null
+                )
+                .department(
+                        complaint.getDepartment() != null
+                                ? complaint.getDepartment().getName()
                                 : null
                 )
 
@@ -614,13 +804,27 @@ public class ComplaintServiceImpl implements ComplaintService {
                                 : null
                 )
 
+                .assignedStaffId(assignedStaffId)
                 .assignedTo(
                         complaint.getAssignedTo() != null
                                 ? complaint.getAssignedTo().getName()
                                 : null
                 )
+                .assignedStaffEmail(assignedStaffEmail)
+                .studentName(studentName)
 
                 .createdAt(complaint.getCreatedAt())
+                .updatedAt(complaint.getUpdatedAt())
+                .resolvedAt(complaint.getResolvedAt())
+
+                // Immutable ML Prediction Audit
+                .mlPredictedClass(complaint.getMlPredictedClass())
+                .mlConfidence(complaint.getMlConfidence() != null ? complaint.getMlConfidence().doubleValue() : null)
+                .mlPredictedPriority(complaint.getMlPredictedPriority())
+
+                // Admin Override Audit Note
+                .adminOverrideNote(complaint.getAdminOverrideNote())
+
                 .files(files)
                 .timeline(timeline)
                 .build();

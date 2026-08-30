@@ -13,8 +13,14 @@ public class Department {
     @Column(name = "department_id")
     private Long departmentId;
 
+    @Column(name = "code", length = 50, nullable = false, unique = true)
+    private String code;
+
     @Column(nullable = false, unique = true)
     private String name;
+
+    @Column(name = "description", length = 500)
+    private String description;
 
     @Column(name = "active", nullable = false)
     private boolean active = true;

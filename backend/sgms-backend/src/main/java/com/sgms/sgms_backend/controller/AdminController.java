@@ -112,6 +112,14 @@ public class AdminController {
         return adminService.disableStaff(id);
     }
 
+    @GetMapping("/staff/by-department/{departmentId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<StaffResponse> getStaffByDepartment(
+            @PathVariable Long departmentId
+    ) {
+        return adminService.getStaffByDepartment(departmentId);
+    }
+
     /* =========================================
        Dashboard Stats
     ========================================= */

@@ -8,8 +8,8 @@ import lombok.Data;
         name = "workflow",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_workflow_department",
-                        columnNames = {"department_id"}
+                        name = "uk_workflow_dept_version",
+                        columnNames = {"department_id", "version"}
                 )
         }
 )
@@ -23,6 +23,12 @@ public class Workflow {
 
     @Column(name = "name", length = 100, nullable = false)
     private String name;
+
+    @Column(name = "version", nullable = false)
+    private int version = 1;
+
+    @Column(name = "active", nullable = false)
+    private boolean active = true;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "department_id", nullable = false)
