@@ -408,6 +408,18 @@ public class AdminManagementServiceImpl implements AdminManagementService {
         );
     }
 
+    @Override
+    public List<StaffResponse> getStaffByDepartment(Long departmentId) {
+        if (departmentId == null) {
+            return List.of();
+        }
+        return staffRepo.findByDepartment_DepartmentId(departmentId)
+                .stream()
+                .filter(s -> s.getUser() != null && s.getUser().isEnabled())
+                .map(this::mapToStaffResponse)
+                .toList();
+    }
+
     private StaffResponse mapToStaffResponse(StaffInfo staff) {
 
         return new StaffResponse(

@@ -30,6 +30,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(ex.getMessage(), 403, System.currentTimeMillis()));
     }
 
+    /** 403 — Spring Security Access Denied */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("Access denied: " + ex.getMessage(), 403, System.currentTimeMillis()));
+    }
+
     /** 400 — explicit validation/business rule violation */
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ErrorResponse> handleValidation(ValidationException ex) {
