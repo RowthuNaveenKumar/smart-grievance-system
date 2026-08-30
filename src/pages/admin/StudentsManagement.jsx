@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Search, Edit, UserX, Users, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, Edit, UserX, Users, Plus, ArrowLeft } from "lucide-react";
 import {
   getAllStudents,
   disableStudent,
@@ -11,6 +12,7 @@ import StudentModal from "@/components/admin/StudentModal";
 import { toast } from "sonner";
 
 export default function StudentsManagement() {
+  const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,14 @@ export default function StudentsManagement() {
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/admin-dashboard")}
+              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+
             <div className="bg-indigo-500/20 border border-indigo-500/30 px-4 py-2 rounded-xl">
               <span className="text-indigo-300 font-semibold">
                 {students.length} Students

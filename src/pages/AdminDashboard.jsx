@@ -7,6 +7,8 @@ import {
   Users,
   FileText,
   Building2,
+  Layers,
+  GitBranch,
   TrendingUp,
   Clock,
   CheckCircle,
@@ -80,13 +82,19 @@ export default function AdminDashboard() {
 
   const quickActions = [
     {
+      title: "Complaints",
+      description: "Browse and manage platform complaints",
+      icon: FileText,
+      action: () => navigate("/admin/complaints"),
+      color: "from-purple-500 via-indigo-500 to-blue-500",
+    },
+    {
       title: "Students",
       description: "Manage student accounts",
       icon: Users,
       action: () => navigate("/admin/students"),
       color: "from-amber-400 via-orange-500 to-yellow-500",
     },
-
     {
       title: "Staff",
       description: "Manage staff accounts",
@@ -95,25 +103,25 @@ export default function AdminDashboard() {
       color: "from-cyan-500 via-blue-500 to-indigo-500",
     },
     {
-      title: "Manage Departments",
-      description: "Add, edit, or remove departments",
+      title: "Departments",
+      description: "Manage dynamic business departments & workflow readiness",
       icon: Building2,
-      action: () => navigate("/manage-departments"),
-      color: "from-indigo-500 via-blue-500 to-cyan-500",
+      action: () => navigate("/admin/departments"),
+      color: "from-emerald-400 via-teal-500 to-cyan-500",
     },
     {
-      title: "View All Complaints",
-      description: "Browse and manage complaints",
-      icon: FileText,
-      action: () => navigate("/complaints"),
-      color: "from-purple-500 via-indigo-500 to-blue-500",
+      title: "Categories",
+      description: "Manage operational complaint categories per department",
+      icon: Layers,
+      action: () => navigate("/admin/categories"),
+      color: "from-fuchsia-500 via-purple-500 to-indigo-500",
     },
     {
-      title: "Analytics",
-      description: "View detailed reports",
-      icon: TrendingUp,
-      action: () => navigate("/analytics"),
-      color: "from-emerald-500 via-green-500 to-teal-500",
+      title: "Workflows",
+      description: "Manage multi-level routing, SLAs & workflow versioning",
+      icon: GitBranch,
+      action: () => navigate("/admin/workflows"),
+      color: "from-cyan-400 via-blue-500 to-indigo-600",
     },
   ];
 
@@ -233,9 +241,9 @@ export default function AdminDashboard() {
                 <h3 className="text-3xl font-bold text-white">
                   {stats.totalComplaints > 0
                     ? `${Math.round(
-                        (stats.resolvedComplaints / stats.totalComplaints) *
-                          100,
-                      )}%`
+                      (stats.resolvedComplaints / stats.totalComplaints) *
+                      100,
+                    )}%`
                     : "0%"}
                 </h3>
                 <p className="mt-1 text-sm text-slate-300">
@@ -428,7 +436,11 @@ export default function AdminDashboard() {
                   </p>
 
                   <Button
-                    onClick={() => navigate(`/complaint/${complaint.id}`)}
+                    onClick={() =>
+                      navigate(`/complaint/${complaint.id}`, {
+                        state: { from: "admin-dashboard" },
+                      })
+                    }
                     className="mt-5 h-11 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-5 font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-[1.01]"
                   >
                     <Sparkles className="mr-2 h-4 w-4" />
