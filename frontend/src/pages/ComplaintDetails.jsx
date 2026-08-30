@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import moment from "moment";
 import { motion } from "framer-motion";
 
@@ -23,18 +23,70 @@ import {
   Clock3,
   CheckCircle2,
   Lock,
+  Building2,
+  Edit3,
+  UserPlus,
+  Info,
+  X,
 } from "lucide-react";
 import { useUser } from "@/context/UserContext";
+import {
+  overrideDepartment,
+  reassignStaff,
+  getDepartments,
+  getStaffByDepartment,
+} from "@/services/adminComplaintApi";
+import { toast } from "sonner";
 
 export default function ComplaintDetails() {
   const { id } = useParams();
   const { user } = useUser();
-  const isStaff = user?.accountType == "STAFF";
+  const isAdmin = user?.role === "ADMIN";
+  const isStaff = user?.accountType === "STAFF" && !isAdmin;
   const isStudent = user?.accountType === "STUDENT";
   const navigate = useNavigate();
+  const location = useLocation();
+
+  /**
+   * Determine the back destination using explicit navigation state first,
+   * then fall back to the authenticated user's role-based dashboard.
+   * Never navigates to public pages (/, /home, /login, /submit).
+   */
+  const getBackDestination = () => {
+    const from = location.state?.from;
+
+    if (from === "submission") return "/student-dashboard";
+    if (from === "student-dashboard") return "/student-dashboard";
+    if (from === "staff-dashboard") return "/staff-dashboard";
+    if (from === "admin-dashboard") return "/admin-dashboard";
+    if (from === "admin-complaints") return "/admin/complaints";
+
+    // Safe role-based fallback when state is absent (direct URL / refresh)
+    if (user?.role === "ADMIN") return "/admin/complaints";
+    if (user?.accountType === "STUDENT") return "/student-dashboard";
+    if (user?.accountType === "STAFF") return "/staff-dashboard";
+
+    // Last resort: login (should not be reached for authenticated users)
+    return "/login";
+  };
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Admin Override Modal
+  const [departments, setDepartments] = useState([]);
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [targetDeptId, setTargetDeptId] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+
+  // Admin Reassign Modal
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [deptStaffList, setDeptStaffList] = useState([]);
+  const [targetStaffId, setTargetStaffId] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [reassignSubmitting, setReassignSubmitting] = useState(false);
 
   const [note, setNote] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -183,6 +235,85 @@ export default function ComplaintDetails() {
     }
   };
 
+  const openOverrideModal = async () => {
+    setTargetDeptId(complaint.departmentId ? String(complaint.departmentId) : "");
+    setOverrideReason("");
+    setOverrideModalOpen(true);
+    try {
+      const depts = await getDepartments();
+      setDepartments(depts || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOverrideSubmit = async (e) => {
+    e.preventDefault();
+    if (!targetDeptId) {
+      toast.error("Please select a target department");
+      return;
+    }
+    if (!overrideReason.trim()) {
+      toast.error("Please provide an override justification note");
+      return;
+    }
+    try {
+      setOverrideSubmitting(true);
+      await overrideDepartment(complaint.complaintId, {
+        departmentId: Number(targetDeptId),
+        note: overrideReason.trim(),
+      });
+      toast.success("Department overridden successfully");
+      setOverrideModalOpen(false);
+      loadComplaint();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Failed to override department");
+    } finally {
+      setOverrideSubmitting(false);
+    }
+  };
+
+  const openReassignModal = async () => {
+    setTargetStaffId(complaint.assignedStaffId ? String(complaint.assignedStaffId) : "");
+    setReassignReason("");
+    setReassignModalOpen(true);
+    if (complaint.departmentId) {
+      try {
+        setReassignLoading(true);
+        const staff = await getStaffByDepartment(complaint.departmentId);
+        setDeptStaffList(staff || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setReassignLoading(false);
+      }
+    }
+  };
+
+  const handleReassignSubmit = async (e) => {
+    e.preventDefault();
+    if (!targetStaffId) {
+      toast.error("Please select a staff member");
+      return;
+    }
+    try {
+      setReassignSubmitting(true);
+      await reassignStaff(complaint.complaintId, {
+        staffId: Number(targetStaffId),
+        note: reassignReason.trim() || undefined,
+      });
+      toast.success("Staff reassigned successfully");
+      setReassignModalOpen(false);
+      loadComplaint();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Failed to reassign staff");
+    } finally {
+      setReassignSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 text-white">
@@ -242,7 +373,7 @@ export default function ComplaintDetails() {
 
           <Button
             variant="ghost"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(getBackDestination())}
             className="flex items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-slate-300 hover:bg-white/10 hover:text-white"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -265,7 +396,7 @@ export default function ComplaintDetails() {
             <div className="relative p-8 sm:p-10">
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-200">
                 <Sparkles className="h-3.5 w-3.5" />
-                Complaint Overview
+                Complaint Overview #{complaint.complaintId}
               </div>
 
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -275,12 +406,13 @@ export default function ComplaintDetails() {
                   </h1>
                   <p className="mt-3 text-sm text-slate-300">
                     Submitted {moment(complaint.createdAt).fromNow()}
+                    {complaint.studentName && <span> by <strong className="text-white">{complaint.studentName}</strong></span>}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
                   <Badge className="border border-indigo-400/20 bg-indigo-500/15 px-3 py-1 text-indigo-200">
-                    {complaint.category}
+                    {complaint.category || "Uncategorized"}
                   </Badge>
 
                   <Badge
@@ -314,11 +446,82 @@ export default function ComplaintDetails() {
                 </p>
               </div>
 
+              {/* AI Prediction & Routing Separation Section */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {/* AI Prediction (Immutable Audit) */}
+                <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5 backdrop-blur-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="h-4 w-4 text-purple-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-purple-300">
+                      AI Prediction (Immutable Audit)
+                    </h4>
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <div>
+                      <p className="text-xs text-slate-400">Predicted Class</p>
+                      <p className="text-base font-semibold text-white mt-0.5">
+                        {complaint.mlPredictedClass || "Not Classified"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400">Confidence Score</p>
+                      <p className="text-base font-semibold text-purple-300 mt-0.5">
+                        {complaint.mlConfidence ? `${Math.round(complaint.mlConfidence * 100)}%` : "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Current Operational Routing */}
+                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5 backdrop-blur-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="h-4 w-4 text-blue-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                      Current Operational Routing
+                    </h4>
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <div>
+                      <p className="text-xs text-slate-400">Current Department</p>
+                      <p className="text-base font-semibold text-white mt-0.5">
+                        {complaint.department || "Unassigned"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400">Category</p>
+                      <p className="text-base font-semibold text-blue-200 mt-0.5">
+                        {complaint.category || "None"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Override Alert Note if Overridden */}
+              {complaint.adminOverrideNote && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 backdrop-blur-xl flex items-start gap-3">
+                  <Info className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="text-xs font-bold uppercase tracking-wide text-amber-300">
+                      Administrative Override Justification
+                    </h5>
+                    <p className="text-sm text-slate-200 mt-1 italic">
+                      "{complaint.adminOverrideNote}"
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Info boxes */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <InfoBox
+                  title="Department"
+                  value={complaint.department || "Unassigned"}
+                  icon={<Building2 className="h-4 w-4 text-indigo-300" />}
+                />
+                <InfoBox
                   title="Category"
-                  value={complaint.category}
+                  value={complaint.category || "Unassigned"}
                   icon={<FolderOpen className="h-4 w-4 text-indigo-300" />}
                 />
                 <InfoBox
@@ -327,16 +530,45 @@ export default function ComplaintDetails() {
                   icon={<ShieldCheck className="h-4 w-4 text-emerald-300" />}
                 />
                 <InfoBox
-                  title="Assigned To"
+                  title="Assigned Staff"
                   value={complaint.assignedTo || "Unassigned"}
                   icon={<User className="h-4 w-4 text-cyan-300" />}
                 />
-                <InfoBox
-                  title="Created At"
-                  value={moment(complaint.createdAt).format("DD MMM YYYY")}
-                  icon={<CalendarDays className="h-4 w-4 text-amber-300" />}
-                />
               </div>
+
+              {/* Admin Controls Section */}
+              {isAdmin && (
+                <div className="rounded-[1.5rem] border border-indigo-500/25 bg-indigo-500/10 p-6 backdrop-blur-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <ShieldCheck className="h-5 w-5 text-indigo-400" />
+                        Admin Routing Controls
+                      </h3>
+                      <p className="text-xs text-slate-300 mt-1">
+                        Override department classification or reassign staff while maintaining a permanent audit trail.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={openOverrideModal}
+                        className="rounded-xl bg-indigo-600 hover:bg-indigo-700 font-semibold text-xs text-white"
+                      >
+                        <Edit3 className="mr-1.5 h-3.5 w-3.5" />
+                        Override Department
+                      </Button>
+                      <Button
+                        onClick={openReassignModal}
+                        className="rounded-xl bg-cyan-600 hover:bg-cyan-700 font-semibold text-xs text-white"
+                      >
+                        <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                        Reassign Staff
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {isStaff && (
                 <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
@@ -469,6 +701,183 @@ export default function ComplaintDetails() {
           </Card>
         </motion.div>
       </div>
+
+      {/* OVERRIDE MODAL */}
+      {overrideModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
+                  <Edit3 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Override Department</h2>
+                  <p className="text-xs text-slate-400">Complaint #{complaint.complaintId}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setOverrideModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleOverrideSubmit} className="mt-5 space-y-4">
+              <div className="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 text-xs text-purple-200">
+                <div className="flex items-center gap-1.5 font-semibold text-purple-300">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI Prediction: {complaint.mlPredictedClass || "None"} ({Math.round((complaint.mlConfidence || 0) * 100)}%)
+                </div>
+                <p className="mt-1 text-slate-300 text-[11px]">
+                  The AI prediction remains permanent for auditing. Overriding will only modify operational routing.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Target Department *
+                </label>
+                <select
+                  value={targetDeptId}
+                  onChange={(e) => setTargetDeptId(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-white/10 bg-slate-800 text-sm text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  required
+                >
+                  <option value="">Select Target Department</option>
+                  {departments
+                    .filter((d) => d.active !== false)
+                    .map((d) => (
+                      <option key={d.departmentId} value={String(d.departmentId)}>
+                        {d.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Override Justification Reason *
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Provide justification note (e.g. Incident physically occurred in hostel, misclassified by student)..."
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-white/10 bg-slate-800 text-sm text-white placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setOverrideModalOpen(false)}
+                  className="rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={overrideSubmitting}
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 font-semibold text-white px-5"
+                >
+                  {overrideSubmitting ? "Overriding..." : "Confirm Override"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* REASSIGN MODAL */}
+      {reassignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Reassign Staff</h2>
+                  <p className="text-xs text-slate-400">Department: {complaint.department || "None"}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReassignModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReassignSubmit} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Assign to Department Staff *
+                </label>
+                {reassignLoading ? (
+                  <div className="p-3 text-center text-xs text-slate-400 bg-slate-800 rounded-xl">
+                    Loading department staff...
+                  </div>
+                ) : deptStaffList.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    No active staff found for this department. Please create/assign staff in Staff Management first.
+                  </div>
+                ) : (
+                  <select
+                    value={targetStaffId}
+                    onChange={(e) => setTargetStaffId(e.target.value)}
+                    className="w-full h-11 px-3.5 rounded-xl border border-white/10 bg-slate-800 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                    required
+                  >
+                    <option value="">Select Staff Member</option>
+                    {deptStaffList.map((s) => (
+                      <option key={s.staffId} value={String(s.staffId)}>
+                        {s.name} ({s.email})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Reassignment Note (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Assigned to senior officer for resolution..."
+                  value={reassignReason}
+                  onChange={(e) => setReassignReason(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-white/10 bg-slate-800 text-sm text-white placeholder:text-slate-500 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setReassignModalOpen(false)}
+                  className="rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={reassignSubmitting || deptStaffList.length === 0}
+                  className="rounded-xl bg-cyan-600 hover:bg-cyan-700 font-semibold text-white px-5"
+                >
+                  {reassignSubmitting ? "Reassigning..." : "Confirm Reassignment"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

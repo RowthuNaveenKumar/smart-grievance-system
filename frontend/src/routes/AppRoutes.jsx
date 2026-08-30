@@ -11,6 +11,10 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import SplashScreen from "@/pages/SplashScreen";
 import StudentsManagement from "@/pages/admin/StudentsManagement";
 import StaffManagement from "@/pages/admin/StaffManagement";
+import ComplaintsManagement from "@/pages/admin/ComplaintsManagement";
+import DepartmentsManagement from "@/pages/admin/DepartmentsManagement";
+import CategoriesManagement from "@/pages/admin/CategoriesManagement";
+import WorkflowsManagement from "@/pages/admin/WorkflowsManagement";
 
 export default function AppRoutes() {
   return (
@@ -66,6 +70,15 @@ export default function AppRoutes() {
         />
 
         <Route
+          path="/admin/complaints"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <ComplaintsManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/admin/students"
           element={
             <ProtectedRoute role="ADMIN">
@@ -79,6 +92,33 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute role="ADMIN">
               <StaffManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/departments"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <DepartmentsManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/categories"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <CategoriesManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/workflows"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <WorkflowsManagement />
             </ProtectedRoute>
           }
         />
