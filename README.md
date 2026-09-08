@@ -624,6 +624,9 @@ erDiagram
 
 ---
 
+<img width="1377" height="782" alt="Screenshot 2026-03-12 155714" src="https://github.com/user-attachments/assets/241af2e2-31ce-4804-a42e-14305801ef32" />
+
+
 ## Security Model
 
 - **Stateless JWT.** `SessionCreationPolicy.STATELESS`, no server-side session. `JwtFilter` runs before
