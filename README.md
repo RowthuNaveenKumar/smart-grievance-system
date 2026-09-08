@@ -249,7 +249,10 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS sgdb CHARACTER SET utf8mb4;"
 > ```bash
 > mysqldump --no-data -u root -p sgdb > database/schema.sql
 > ```
-> 
+>
+<img width="1377" height="782" alt="Screenshot 2026-03-12 155714" src="https://github.com/user-attachments/assets/7baaa467-2655-4b8e-b59e-5a1455f5558d" />
+
+
 <img width="1588" height="1625" alt="er-diagram" src="https://github.com/user-attachments/assets/08b6df87-19e6-4325-acc6-131d26b13c11" />
 
 The system is configuration-driven, so a working environment needs reference data seeded before the
