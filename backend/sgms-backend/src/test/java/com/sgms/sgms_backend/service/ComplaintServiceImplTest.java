@@ -17,6 +17,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,6 +30,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -492,6 +498,256 @@ class ComplaintServiceImplTest {
         assertThatThrownBy(() -> service.reassignStaff(100L, req))
                 .isInstanceOf(com.sgms.sgms_backend.exception.ValidationException.class)
                 .hasMessageContaining("belongs to department");
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       PHASE A.2: SERVICE LAYER PAGINATION TESTS
+    ───────────────────────────────────────────────────────────── */
+
+    @Test
+    void getComplaintsByStudent_S01_to_S05_success_delegatesToRepositoryAndPreservesPaginationMetadata() {
+        mockSecurityContext("student@test.com");
+        when(userRepo.findByEmail("student@test.com")).thenReturn(Optional.of(studentUser));
+        when(studentRepo.findByUser_UserId(10)).thenReturn(Optional.of(student));
+
+        Complaint complaint2 = new Complaint();
+        complaint2.setComplaintId(2L);
+        complaint2.setTitle("Second complaint");
+        complaint2.setDescription("Second description");
+        complaint2.setStatus(ComplaintStatus.OPEN);
+        complaint2.setPriority(Priority.MEDIUM);
+        complaint2.setCategory(category);
+        complaint2.setDepartment(department);
+        complaint2.setStudent(student);
+
+        Pageable pageable = PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Complaint> mockComplaintPage = new PageImpl<>(List.of(complaint, complaint2), pageable, 12L);
+        when(complaintRepo.findByStudentStudentId(10, pageable)).thenReturn(mockComplaintPage);
+
+        Page<ComplaintSummaryResponse> responsePage = service.getComplaintsByStudent(10, pageable);
+
+        // S01: Verify delegation to repository with correct studentId and pageable
+        verify(complaintRepo, times(1)).findByStudentStudentId(10, pageable);
+
+        // S02: Verify entities mapped to ComplaintSummaryResponse
+        assertThat(responsePage.getContent())
+                .extracting(ComplaintSummaryResponse::getComplaintId)
+                .containsExactly(1L, 2L);
+
+        // S03: Verify page content size
+        assertThat(responsePage.getContent()).hasSize(2);
+        assertThat(responsePage.getNumberOfElements()).isEqualTo(2);
+
+        // S04: Verify total elements and total pages
+        assertThat(responsePage.getTotalElements()).isEqualTo(12L);
+        assertThat(responsePage.getTotalPages()).isEqualTo(3);
+
+        // S05: Verify requested page number and page size
+        assertThat(responsePage.getNumber()).isEqualTo(0);
+        assertThat(responsePage.getSize()).isEqualTo(5);
+    }
+
+    @Test
+    void getComplaintsByStudent_S06_studentCannotAccessOtherStudentComplaints_throwsForbiddenException() {
+        mockSecurityContext("other@test.com");
+        when(userRepo.findByEmail("other@test.com")).thenReturn(Optional.of(otherStudentUser));
+        when(studentRepo.findByUser_UserId(99)).thenReturn(Optional.of(otherStudent));
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        // otherStudent (id=99) attempts to access student (id=10)'s complaints
+        assertThatThrownBy(() -> service.getComplaintsByStudent(10, pageable))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Access denied: you can only view your own complaints");
+
+        verify(complaintRepo, never()).findByStudentStudentId(anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    void getComplaintsByStudent_S06_staffCanAccessAnyStudentComplaints() {
+        User staffUser = new User();
+        staffUser.setUserId(20);
+        staffUser.setEmail("staff@test.com");
+        staffUser.setAccountType(AccountType.STAFF);
+
+        mockSecurityContext("staff@test.com");
+        when(userRepo.findByEmail("staff@test.com")).thenReturn(Optional.of(staffUser));
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(complaintRepo.findByStudentStudentId(10, pageable))
+                .thenReturn(new PageImpl<>(List.of(complaint), pageable, 1L));
+
+        Page<ComplaintSummaryResponse> responsePage = service.getComplaintsByStudent(10, pageable);
+
+        assertThat(responsePage).isNotNull();
+        assertThat(responsePage.getTotalElements()).isEqualTo(1L);
+        verify(complaintRepo, times(1)).findByStudentStudentId(10, pageable);
+    }
+
+    @Test
+    void getComplaintsByStudent_S07_neverCallsListReturningRepositoryMethod() {
+        mockSecurityContext("student@test.com");
+        when(userRepo.findByEmail("student@test.com")).thenReturn(Optional.of(studentUser));
+        when(studentRepo.findByUser_UserId(10)).thenReturn(Optional.of(student));
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(complaintRepo.findByStudentStudentId(10, pageable))
+                .thenReturn(new PageImpl<>(List.of(complaint), pageable, 1L));
+
+        service.getComplaintsByStudent(10, pageable);
+
+        // Verify paginated method was called, and List-returning method was NEVER called
+        verify(complaintRepo, times(1)).findByStudentStudentId(10, pageable);
+        verify(complaintRepo, never()).findByStudentStudentId(anyInt());
+    }
+
+    @Test
+    void getComplaintsByStaff_ST01_to_ST04_success_delegatesToRepositoryAndPreservesPaginationMetadata() {
+        User staffUser = new User();
+        staffUser.setUserId(20);
+        staffUser.setEmail("staff@test.com");
+        staffUser.setAccountType(AccountType.STAFF);
+
+        StaffInfo staffInfo = new StaffInfo();
+        staffInfo.setStaffId(20);
+        staffInfo.setName("Staff Member A");
+        staffInfo.setUser(staffUser);
+
+        mockSecurityContext("staff@test.com");
+        when(userRepo.findByEmail("staff@test.com")).thenReturn(Optional.of(staffUser));
+        when(staffRepo.findByUser_UserId(20)).thenReturn(Optional.of(staffInfo));
+
+        Complaint staffComplaint1 = new Complaint();
+        staffComplaint1.setComplaintId(101L);
+        staffComplaint1.setTitle("Staff Assigned 1");
+        staffComplaint1.setStatus(ComplaintStatus.IN_PROGRESS);
+        staffComplaint1.setAssignedTo(staffInfo);
+
+        Complaint staffComplaint2 = new Complaint();
+        staffComplaint2.setComplaintId(102L);
+        staffComplaint2.setTitle("Staff Assigned 2");
+        staffComplaint2.setStatus(ComplaintStatus.IN_PROGRESS);
+        staffComplaint2.setAssignedTo(staffInfo);
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Complaint> mockStaffPage = new PageImpl<>(List.of(staffComplaint1, staffComplaint2), pageable, 15L);
+        when(complaintRepo.findByAssignedToStaffId(20, pageable)).thenReturn(mockStaffPage);
+
+        Page<ComplaintSummaryResponse> responsePage = service.getComplaintsByStaff(20, pageable);
+
+        // ST01: Verify delegation to repository with correct staffId and pageable
+        verify(complaintRepo, times(1)).findByAssignedToStaffId(20, pageable);
+
+        // ST02: Verify entities mapped to ComplaintSummaryResponse
+        assertThat(responsePage.getContent())
+                .extracting(ComplaintSummaryResponse::getComplaintId)
+                .containsExactly(101L, 102L);
+
+        // ST03: Verify page content size and total elements
+        assertThat(responsePage.getContent()).hasSize(2);
+        assertThat(responsePage.getNumberOfElements()).isEqualTo(2);
+        assertThat(responsePage.getTotalElements()).isEqualTo(15L);
+
+        // ST04: Verify total pages, page number, and page size
+        assertThat(responsePage.getTotalPages()).isEqualTo(2);
+        assertThat(responsePage.getNumber()).isEqualTo(0);
+        assertThat(responsePage.getSize()).isEqualTo(10);
+    }
+
+    @Test
+    void getComplaintsByStaff_ST05_studentCannotAccessStaffComplaints_throwsForbiddenException() {
+        mockSecurityContext("student@test.com");
+        when(userRepo.findByEmail("student@test.com")).thenReturn(Optional.of(studentUser));
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        assertThatThrownBy(() -> service.getComplaintsByStaff(20, pageable))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Access denied: students cannot view staff complaints");
+
+        verify(complaintRepo, never()).findByAssignedToStaffId(anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    void getComplaintsByStaff_ST05_staffCannotAccessOtherStaffComplaints_throwsForbiddenException() {
+        User otherStaffUser = new User();
+        otherStaffUser.setUserId(30);
+        otherStaffUser.setEmail("otherstaff@test.com");
+        otherStaffUser.setAccountType(AccountType.STAFF);
+
+        StaffInfo otherStaff = new StaffInfo();
+        otherStaff.setStaffId(30);
+        otherStaff.setName("Other Staff");
+        otherStaff.setUser(otherStaffUser);
+        otherStaff.setRoles(Set.of());
+
+        mockSecurityContext("otherstaff@test.com");
+        when(userRepo.findByEmail("otherstaff@test.com")).thenReturn(Optional.of(otherStaffUser));
+        when(staffRepo.findByUser_UserId(30)).thenReturn(Optional.of(otherStaff));
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        // otherStaff (id=30) attempts to access staff (id=20)'s complaints
+        assertThatThrownBy(() -> service.getComplaintsByStaff(20, pageable))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Access denied: you can only view your own assigned complaints");
+
+        verify(complaintRepo, never()).findByAssignedToStaffId(anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    void getComplaintsByStaff_ST05_adminCanAccessAnyStaffComplaints() {
+        User adminUser = new User();
+        adminUser.setUserId(1);
+        adminUser.setEmail("admin@test.com");
+        adminUser.setAccountType(AccountType.STAFF);
+
+        mockSecurityContext("admin@test.com");
+        when(userRepo.findByEmail("admin@test.com")).thenReturn(Optional.of(adminUser));
+        when(staffRepo.findByUser_UserId(1)).thenReturn(Optional.empty()); // Admin has no StaffInfo
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Complaint staffComplaint = new Complaint();
+        staffComplaint.setComplaintId(101L);
+
+        when(complaintRepo.findByAssignedToStaffId(20, pageable))
+                .thenReturn(new PageImpl<>(List.of(staffComplaint), pageable, 1L));
+
+        Page<ComplaintSummaryResponse> responsePage = service.getComplaintsByStaff(20, pageable);
+
+        assertThat(responsePage).isNotNull();
+        assertThat(responsePage.getTotalElements()).isEqualTo(1L);
+        verify(complaintRepo, times(1)).findByAssignedToStaffId(20, pageable);
+    }
+
+    @Test
+    void getComplaintsByStaff_ST06_neverCallsListReturningRepositoryMethod() {
+        User staffUser = new User();
+        staffUser.setUserId(20);
+        staffUser.setEmail("staff@test.com");
+        staffUser.setAccountType(AccountType.STAFF);
+
+        StaffInfo staffInfo = new StaffInfo();
+        staffInfo.setStaffId(20);
+        staffInfo.setName("Staff Member A");
+        staffInfo.setUser(staffUser);
+
+        mockSecurityContext("staff@test.com");
+        when(userRepo.findByEmail("staff@test.com")).thenReturn(Optional.of(staffUser));
+        when(staffRepo.findByUser_UserId(20)).thenReturn(Optional.of(staffInfo));
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Complaint staffComplaint = new Complaint();
+        staffComplaint.setComplaintId(101L);
+
+        when(complaintRepo.findByAssignedToStaffId(20, pageable))
+                .thenReturn(new PageImpl<>(List.of(staffComplaint), pageable, 1L));
+
+        service.getComplaintsByStaff(20, pageable);
+
+        // Verify paginated method was called, and List-returning method was NEVER called
+        verify(complaintRepo, times(1)).findByAssignedToStaffId(20, pageable);
+        verify(complaintRepo, never()).findByAssignedToStaffId(anyInt());
     }
 
     /* ─────────────────────────────────────────────────────────────

@@ -112,6 +112,15 @@ public class AdminController {
         return adminService.disableStaff(id);
     }
 
+    @PatchMapping("/staff/{id}/enable")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StatusResponse enableStaff(
+            @PathVariable Long id
+    ) {
+
+        return adminService.enableStaff(id);
+    }
+
     @GetMapping("/staff/by-department/{departmentId}")
     @PreAuthorize("hasRole('ADMIN')")
     public List<StaffResponse> getStaffByDepartment(

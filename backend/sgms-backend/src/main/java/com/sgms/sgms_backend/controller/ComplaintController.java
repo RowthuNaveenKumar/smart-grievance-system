@@ -8,12 +8,18 @@ import com.sgms.sgms_backend.model.ComplaintCategory;
 import com.sgms.sgms_backend.repository.ComplaintCategoryRepository;
 import com.sgms.sgms_backend.service.ComplaintService;
 
+import com.sgms.sgms_backend.exception.ValidationException;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/complaints")
@@ -135,6 +141,117 @@ public class ComplaintController {
         return complaintService.getStudentComplaints(studentId);
     }
 
+    /* =========================================
+       PAGINATED COMPLAINTS — PHASE A.3
+    ========================================= */
+
+    private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
+            "createdAt", "updatedAt", "title", "status", "priority", "complaintId"
+    );
+
+    @GetMapping("/student/{studentId}/page")
+    @PreAuthorize("hasAnyRole('STUDENT','STAFF','ADMIN')")
+    public Page<ComplaintSummaryResponse> getComplaintsByStudentPaginated(
+            @PathVariable Integer studentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(required = false) String sort
+    ) {
+        if (studentId == null || studentId < 1) {
+            throw new ValidationException("Student ID must be a positive integer");
+        }
+        Pageable pageable = buildPageable(page, size, sortBy, direction, sort);
+        return complaintService.getComplaintsByStudent(studentId, pageable);
+    }
+
+    @GetMapping("/staff/{staffId}/page")
+    @PreAuthorize("hasAnyRole('STAFF','ADMIN')")
+    public Page<ComplaintSummaryResponse> getComplaintsByStaffPaginated(
+            @PathVariable Integer staffId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(required = false) String sort
+    ) {
+        if (staffId == null || staffId < 1) {
+            throw new ValidationException("Staff ID must be a positive integer");
+        }
+        Pageable pageable = buildPageable(page, size, sortBy, direction, sort);
+        return complaintService.getComplaintsByStaff(staffId, pageable);
+    }
+
+    @GetMapping("/page")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Page<ComplaintSummaryResponse> getComplaintsAdminPaginated(
+            @RequestParam(required = false) ComplaintStatus status,
+            @RequestParam(required = false) Priority priority,
+            @RequestParam(required = false) Long departmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(required = false) String sort
+    ) {
+        if (departmentId != null && departmentId < 1) {
+            throw new ValidationException("Department ID must be a positive integer");
+        }
+        Pageable pageable = buildPageable(page, size, sortBy, direction, sort);
+        return complaintService.getAdminComplaints(status, priority, departmentId, pageable);
+    }
+
+    private Pageable buildPageable(int page, int size, String sortBy, String direction, String sort) {
+        if (page < 0) {
+            throw new ValidationException("Page index must not be negative");
+        }
+        if (size < 1) {
+            throw new ValidationException("Page size must be at least 1");
+        }
+        if (size > 100) {
+            throw new ValidationException("Page size must not exceed 100");
+        }
+
+        String effectiveSortBy = sortBy;
+        String effectiveDirection = direction;
+
+        if (sort != null && !sort.trim().isEmpty()) {
+            String[] parts = sort.split(",");
+            effectiveSortBy = parts[0].trim();
+            if (parts.length > 1) {
+                effectiveDirection = parts[1].trim();
+            }
+        }
+
+        if (effectiveSortBy == null || effectiveSortBy.trim().isEmpty()) {
+            effectiveSortBy = "createdAt";
+        } else {
+            effectiveSortBy = effectiveSortBy.trim();
+        }
+
+        if (!ALLOWED_SORT_PROPERTIES.contains(effectiveSortBy)) {
+            throw new ValidationException("Invalid sort property '" + effectiveSortBy + "'. Allowed properties: " + ALLOWED_SORT_PROPERTIES);
+        }
+
+        Sort.Direction dir = Sort.Direction.DESC;
+        if (effectiveDirection != null && !effectiveDirection.trim().isEmpty()) {
+            try {
+                dir = Sort.Direction.fromString(effectiveDirection.trim());
+            } catch (IllegalArgumentException e) {
+                throw new ValidationException("Invalid sort direction '" + effectiveDirection + "'. Must be 'asc' or 'desc'");
+            }
+        }
+
+        Sort sortOrder;
+        if ("complaintId".equals(effectiveSortBy)) {
+            sortOrder = Sort.by(dir, "complaintId");
+        } else {
+            sortOrder = Sort.by(new Sort.Order(dir, effectiveSortBy), Sort.Order.desc("complaintId"));
+        }
+
+        return PageRequest.of(page, size, sortOrder);
+    }
 
     /* =========================================
        VIEW COMPLAINT DETAILS

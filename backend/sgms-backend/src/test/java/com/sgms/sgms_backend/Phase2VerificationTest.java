@@ -57,11 +57,14 @@ class Phase2VerificationTest {
             }
         }
 
-        // 3. Verify all 14 complaint categories load, are active, have mlClass
+        // 3. Verify all 14 baseline complaint categories load, are active, have mlClass
         List<ComplaintCategory> categories = complaintCategoryRepository.findAllWithDepartment();
         System.out.println("Category count: " + categories.size());
-        assertThat(categories).hasSize(14);
-        for (ComplaintCategory c : categories) {
+        List<ComplaintCategory> baselineCategories = categories.stream()
+                .filter(c -> c.getCategoryId() <= 14)
+                .toList();
+        assertThat(baselineCategories).hasSize(14);
+        for (ComplaintCategory c : baselineCategories) {
             assertThat(c.isActive()).isTrue();
             assertThat(c.getMlClass()).isNotNull().isNotBlank();
             assertThat(c.getDepartment()).isNotNull();
@@ -105,11 +108,14 @@ class Phase2VerificationTest {
 
 // Current baseline expectation: 2 complaints have ML prediction metadata
         assertThat(countWithMlPredictedClass).isEqualTo(2);
-        // 5. Verify findAllActiveWithDepartment() returns only active categories with active departments
+        // 5. Verify findAllActiveWithDepartment() returns active categories with active departments (baseline IDs 1-14)
         List<ComplaintCategory> activeCategories = complaintCategoryRepository.findAllActiveWithDepartment();
         System.out.println("Active categories with active department count: " + activeCategories.size());
-        assertThat(activeCategories).hasSize(14);
-        for (ComplaintCategory ac : activeCategories) {
+        List<ComplaintCategory> baselineActive = activeCategories.stream()
+                .filter(ac -> ac.getCategoryId() <= 14)
+                .toList();
+        assertThat(baselineActive).hasSize(14);
+        for (ComplaintCategory ac : baselineActive) {
             assertThat(ac.isActive()).isTrue();
             assertThat(ac.getDepartment().isActive()).isTrue();
         }

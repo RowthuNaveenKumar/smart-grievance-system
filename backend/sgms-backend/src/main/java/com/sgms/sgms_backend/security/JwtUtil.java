@@ -17,9 +17,13 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    /** Default: 24 hours. Override with jwt.expiration-ms in properties. */
-    @Value("${jwt.expiration-ms:86400000}")
+    /** Default: 30 minutes (1,800,000 ms). Override with jwt.expiration-ms in properties. */
+    @Value("${jwt.expiration-ms:1800000}")
     private long expirationMs;
+
+    public long getExpirationMs() {
+        return expirationMs;
+    }
 
     private Key getKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));

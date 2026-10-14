@@ -32,7 +32,11 @@ public interface AdminManagementService {
 
     StaffResponse updateStaff(Long staffId,UpdateStaffRequest request);
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     StatusResponse disableStaff(Long staffId);
+
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    StatusResponse enableStaff(Long staffId);
 
     List<StaffResponse> getStaffByDepartment(Long departmentId);
 

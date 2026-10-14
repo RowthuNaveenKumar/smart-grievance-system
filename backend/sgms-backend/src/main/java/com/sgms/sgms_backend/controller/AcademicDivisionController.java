@@ -23,7 +23,8 @@ public class AcademicDivisionController {
                 .stream()
                 .map(d -> new DivisionResponse(
                         d.getDivisionId(),
-                        d.getName()
+                        d.getName(),
+                        d.getDepartment() != null ? d.getDepartment().getDepartmentId() : null
                 ))
                 .toList();
     }

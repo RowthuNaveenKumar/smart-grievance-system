@@ -5,6 +5,8 @@ import com.sgms.sgms_backend.enums.ComplaintAction;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import com.sgms.sgms_backend.enums.Priority;
 import com.sgms.sgms_backend.model.Complaint;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -26,6 +28,20 @@ public interface ComplaintService {
     List<ComplaintResponse> getMyComplaints();
 
     List<ComplaintResponse> getAssignedComplaints();
+
+    // ── Phase A.2: Paginated complaint retrieval (Phase A.5: returns lightweight summary) ──
+
+    Page<ComplaintSummaryResponse> getComplaintsByStudent(Integer studentId, Pageable pageable);
+
+    Page<ComplaintSummaryResponse> getComplaintsByStaff(Integer staffId, Pageable pageable);
+
+    // ── Phase A.6: Admin platform-wide paginated complaint retrieval with structured filters ──
+    Page<ComplaintSummaryResponse> getAdminComplaints(
+            ComplaintStatus status,
+            Priority priority,
+            Long departmentId,
+            Pageable pageable
+    );
 
     ComplaintResponse updateStatus(Long id, ComplaintAction action, ActionRequest req);
 

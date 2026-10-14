@@ -17,6 +17,10 @@ import com.sgms.sgms_backend.service.workflow.ComplaintWorkflowService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -40,6 +44,47 @@ public class ComplaintServiceImpl implements ComplaintService {
 
     @Value("${ml.confidence.threshold:0.60}")
     private double mlConfidenceThreshold;
+
+    public static final Set<String> INSTITUTIONAL_OVERSIGHT_ROLES = Set.of(
+            "CHIEF_PROCTOR",
+            "DEAN",
+            "PROCTOR",
+            "DEAN_STUDENT_WELFARE",
+            "REGISTRAR"
+    );
+
+    public static final Set<String> DEPARTMENT_OVERSIGHT_ROLES = Set.of(
+            "HOD",
+            "HEAD_OF_DEPARTMENT",
+            "WARDEN"
+    );
+
+    private boolean isDepartmentOversightRole(String roleName) {
+        if (roleName == null) return false;
+        String normalized = roleName.trim().toUpperCase(Locale.ROOT);
+        return DEPARTMENT_OVERSIGHT_ROLES.contains(normalized) ||
+               DEPARTMENT_OVERSIGHT_ROLES.stream().anyMatch(normalized::contains);
+    }
+
+    private boolean isInstitutionalOversightRole(String roleName) {
+        if (roleName == null) return false;
+        String normalized = roleName.trim().toUpperCase(Locale.ROOT);
+        return INSTITUTIONAL_OVERSIGHT_ROLES.contains(normalized) ||
+               INSTITUTIONAL_OVERSIGHT_ROLES.stream().anyMatch(normalized::contains);
+    }
+
+    private boolean isPlatformAdmin(StaffInfo staff, Authentication auth) {
+        if (auth != null && auth.getAuthorities() != null &&
+                auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority()))) {
+            return true;
+        }
+        if (staff != null && staff.getRoles() != null) {
+            return staff.getRoles().stream()
+                    .anyMatch(r -> r.getRoleId() != null && Long.valueOf(1L).equals(r.getRoleId())
+                            && "ADMIN".equalsIgnoreCase(r.getRoleName()));
+        }
+        return false;
+    }
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -231,39 +276,99 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         validateStaffAccess(complaint);
 
-        int nextLevel = complaint.getCurrentLevel() + 1;
+        // Escalation is invalid from terminal or final states
+        ComplaintStatus currentStatus = complaint.getStatus();
+        if (currentStatus == ComplaintStatus.RESOLVED || currentStatus == ComplaintStatus.CLOSED) {
+            throw new ValidationException(
+                "Cannot escalate a " + currentStatus.name() + " complaint. " +
+                "Escalation is only allowed from OPEN, IN_PROGRESS, or ESCALATED status."
+            );
+        }
 
-        WorkflowStep step =
-                workflowService.getNextStep(
-                        complaint.getWorkflow(),
-                        nextLevel
+        Workflow workflow = complaint.getWorkflow();
+        if (workflow == null && complaint.getDepartment() != null && workflowService != null) {
+            try {
+                workflow = workflowService.findWorkflowForDepartment(complaint.getDepartment()).orElse(null);
+            } catch (Exception ignored) {}
+        }
+
+        if (workflow == null) {
+            throw new ValidationException("Cannot escalate: No active workflow configured for this complaint's department.");
+        }
+
+        int currentLevel = complaint.getCurrentLevel() != null ? complaint.getCurrentLevel() : 1;
+        Integer maxLevel = null;
+        try {
+            maxLevel = workflowService.getMaxLevel(workflow);
+        } catch (Exception ignored) {}
+
+        if (maxLevel != null && maxLevel > 0 && currentLevel >= maxLevel) {
+            throw new ValidationException(
+                String.format("Complaint is already at the final authority level (Level %d of %d). Cannot escalate further.", currentLevel, maxLevel)
+            );
+        }
+
+        int nextLevel = currentLevel + 1;
+        WorkflowStep step = null;
+        try {
+            step = workflowService.findStep(workflow, nextLevel).orElse(null);
+        } catch (Exception ignored) {}
+
+        if (step == null) {
+            try {
+                step = workflowService.getNextStep(workflow, nextLevel);
+            } catch (Exception e) {
+                throw new ValidationException(
+                    String.format("Cannot escalate: No workflow step configured for level %d in workflow '%s'", nextLevel, workflow.getName())
                 );
+            }
+        }
 
         Role role = step.getRole();
+        if (role == null) {
+            throw new ValidationException("Cannot escalate: Next workflow step has no role configured");
+        }
 
-        StaffInfo staff =
-                staffRepo.findFirstByRolesContains(role)
-                        .orElseThrow(() ->
-                                new NotFoundException("Staff not found"));
+        StaffInfo staff = null;
+        try {
+            if (assignmentService != null) {
+                staff = assignmentService.findStaffForRole(complaint, role).orElse(null);
+            }
+        } catch (Exception ignored) {}
+
+        if (staff == null) {
+            staff = staffRepo.findFirstByRolesContains(role)
+                    .orElseThrow(() -> new ValidationException(
+                        String.format("Cannot escalate: No staff member configured for next authority role '%s'", role.getRoleName())
+                    ));
+        }
 
         ComplaintStatus oldStatus = complaint.getStatus();
 
         complaint.setAssignedTo(staff);
         complaint.setCurrentLevel(nextLevel);
+        complaint.setEscalationLevel(nextLevel);
         complaint.setStatus(ComplaintStatus.ESCALATED);
 
         complaintRepo.save(complaint);
+
+        String note = (req != null && req.getNote() != null && !req.getNote().trim().isEmpty())
+                ? req.getNote().trim()
+                : String.format("Escalated from level %d to level %d (%s)", currentLevel, nextLevel, role.getRoleName());
 
         timelineService.createTimeline(
                 complaint,
                 ComplaintAction.ESCALATE,
                 oldStatus,
                 ComplaintStatus.ESCALATED,
-                req.getNote(),
+                note,
                 getCurrentUser()
         );
 
-        return getComplaintById(id);
+        log.info("Complaint #{} escalated from level {} to level {} (assigned to '{}', role '{}') by user '{}'",
+                id, currentLevel, nextLevel, staff.getName(), role.getRoleName(), getCurrentUserEmail());
+
+        return mapToResponse(complaint);
     }
 
     /* =========================================
@@ -282,6 +387,9 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         ComplaintStatus oldStatus = complaint.getStatus();
         ComplaintStatus newStatus = action.toStatus();
+
+        // Phase 10E: Validate the transition is allowed by the state machine
+        validateStatusTransition(oldStatus, newStatus);
 
         if (newStatus != null) {
             complaint.setStatus(newStatus);
@@ -312,23 +420,58 @@ public class ComplaintServiceImpl implements ComplaintService {
     @Override
     public ComplaintResponse assignStaff(Long id, Long staffId) {
 
+        // Caller authorization check (defense-in-depth)
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getName() != null) {
+            userRepo.findByEmail(auth.getName()).ifPresent(currentUser -> {
+                if (currentUser.getAccountType() == AccountType.STUDENT) {
+                    throw new ForbiddenException("Access denied: students cannot assign staff to complaints");
+                }
+                if (currentUser.getAccountType() == AccountType.STAFF) {
+                    staffRepo.findByUser_UserId(currentUser.getUserId()).ifPresent(currentStaff -> {
+                        boolean callerIsAdmin = isPlatformAdmin(currentStaff, auth);
+                        if (!callerIsAdmin) {
+                            throw new ForbiddenException("Access denied: only administrators can assign complaint staff");
+                        }
+                    });
+                }
+            });
+        }
+
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Complaint not found"));
 
         StaffInfo staff = staffRepo.findById(staffId)
                 .orElseThrow(() -> new NotFoundException("Staff not found"));
 
+        ComplaintStatus oldStatus = complaint.getStatus();
+
+        // Phase 10E: Assignment must not resurrect RESOLVED or CLOSED complaints.
+        // Only transition to IN_PROGRESS when the complaint is in an active assignable state.
+        if (oldStatus == ComplaintStatus.RESOLVED || oldStatus == ComplaintStatus.CLOSED) {
+            throw new ValidationException(
+                "Cannot assign staff to a " + oldStatus.name() + " complaint. " +
+                "Only OPEN, IN_PROGRESS, or ESCALATED complaints can be assigned."
+            );
+        }
+
         complaint.setAssignedTo(staff);
 
-        ComplaintStatus oldStatus = complaint.getStatus();
-        complaint.setStatus(ComplaintStatus.IN_PROGRESS);
+        // Transition to IN_PROGRESS only if complaint was OPEN or ESCALATED.
+        // If already IN_PROGRESS (re-assignment within same complaint), status is unchanged.
+        ComplaintStatus newStatus = oldStatus;
+        if (oldStatus == ComplaintStatus.OPEN || oldStatus == ComplaintStatus.ESCALATED) {
+            newStatus = ComplaintStatus.IN_PROGRESS;
+            complaint.setStatus(newStatus);
+        }
+
         complaintRepo.save(complaint);
 
         timelineService.createTimeline(
                 complaint,
                 ComplaintAction.MARK_IN_PROGRESS,
                 oldStatus,
-                ComplaintStatus.IN_PROGRESS,
+                newStatus,
                 "Assigned by admin",
                 getCurrentUser()
         );
@@ -356,7 +499,45 @@ public class ComplaintServiceImpl implements ComplaintService {
                 throw new ForbiddenException("Access denied: you can only view your own complaints");
             }
         }
-        // STAFF and ADMIN can view any complaint
+
+        // STAFF read authorization:
+        // Legitimate read access is strictly permitted for:
+        // 1. Platform Administrators (trusted system authority)
+        // 2. Currently Assigned Staff (assigned to this complaint)
+        // 3. Departmental Oversight: Staff holding an explicitly authorized oversight designation applicable to complaint's department (e.g. HOD, WARDEN)
+        // 4. Institutional Oversight: Staff holding an authorized executive oversight role (e.g. CHIEF_PROCTOR, DEAN, PROCTOR, REGISTRAR)
+        // Note: AssignmentScope.GLOBAL determines candidate routing eligibility, NOT universal read permission.
+        if (currentUser.getAccountType() == AccountType.STAFF) {
+            Optional<StaffInfo> staffOpt = staffRepo.findByUser_UserId(currentUser.getUserId());
+            if (staffOpt.isPresent()) {
+                StaffInfo staff = staffOpt.get();
+
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                boolean isPlatformAdmin = isPlatformAdmin(staff, auth);
+
+                boolean isAssigned = complaint.getAssignedTo() != null &&
+                        complaint.getAssignedTo().getStaffId().equals(staff.getStaffId());
+
+                boolean isSameDepartment = complaint.getDepartment() != null && staff.getDepartment() != null &&
+                        complaint.getDepartment().getDepartmentId().equals(staff.getDepartment().getDepartmentId());
+
+                boolean hasDepartmentOversightRole = staff.getRoles() != null && staff.getRoles().stream()
+                        .anyMatch(r -> r.getRoleName() != null && isDepartmentOversightRole(r.getRoleName()));
+
+                boolean hasDepartmentOversight = isSameDepartment && hasDepartmentOversightRole;
+
+                boolean hasInstitutionalOversight = staff.getRoles() != null && staff.getRoles().stream()
+                        .anyMatch(r -> r.getRoleName() != null && isInstitutionalOversightRole(r.getRoleName()));
+
+                if (!isPlatformAdmin && !isAssigned && !hasDepartmentOversight && !hasInstitutionalOversight) {
+                    if (!isSameDepartment) {
+                        throw new ForbiddenException("Access denied: you do not have permission to view complaints outside your department");
+                    } else {
+                        throw new ForbiddenException("Access denied: you do not have department oversight authorization to view this complaint");
+                    }
+                }
+            }
+        }
 
         return mapToResponse(complaint);
     }
@@ -403,6 +584,80 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    /* =========================================
+       PAGINATED COMPLAINTS — PHASE A.2 / A.5
+    ========================================= */
+
+    @Override
+    public Page<ComplaintSummaryResponse> getComplaintsByStudent(Integer studentId, Pageable pageable) {
+
+        User currentUser = getCurrentUser();
+
+        // STUDENT can only view their own complaints
+        if (currentUser.getAccountType() == AccountType.STUDENT) {
+            StudentInfo student = studentRepo.findByUser_UserId(currentUser.getUserId())
+                    .orElseThrow(() -> new NotFoundException("Student not found"));
+
+            if (!student.getStudentId().equals(studentId)) {
+                throw new ForbiddenException("Access denied: you can only view your own complaints");
+            }
+        }
+        // STAFF and ADMIN can view any student's complaints
+
+        Page<Complaint> complaintPage = complaintRepo.findByStudentStudentId(studentId, pageable);
+        return complaintPage.map(this::mapToSummary);
+    }
+
+    @Override
+    public Page<ComplaintSummaryResponse> getComplaintsByStaff(Integer staffId, Pageable pageable) {
+
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getAccountType() == AccountType.STUDENT) {
+            throw new ForbiddenException("Access denied: students cannot view staff complaints");
+        }
+
+        if (currentUser.getAccountType() == AccountType.STAFF) {
+            Optional<StaffInfo> staffOpt = staffRepo.findByUser_UserId(currentUser.getUserId());
+            if (staffOpt.isPresent()) {
+                StaffInfo staff = staffOpt.get();
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                boolean isAdmin = isPlatformAdmin(staff, auth);
+                if (!isAdmin && !staff.getStaffId().equals(staffId)) {
+                    throw new ForbiddenException("Access denied: you can only view your own assigned complaints");
+                }
+            }
+        }
+
+        Page<Complaint> complaintPage = complaintRepo.findByAssignedToStaffId(staffId, pageable);
+        return complaintPage.map(this::mapToSummary);
+    }
+
+    @Override
+    public Page<ComplaintSummaryResponse> getAdminComplaints(
+            ComplaintStatus status,
+            Priority priority,
+            Long departmentId,
+            Pageable pageable
+    ) {
+        Specification<Complaint> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (priority != null) {
+                predicates.add(cb.equal(root.get("priority"), priority));
+            }
+            if (departmentId != null) {
+                predicates.add(cb.equal(root.get("department").get("departmentId"), departmentId));
+            }
+            return predicates.isEmpty() ? null : cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<Complaint> complaintPage = complaintRepo.findAll(spec, pageable);
+        return complaintPage.map(this::mapToSummary);
     }
 
     /* =========================================
@@ -467,8 +722,12 @@ public class ComplaintServiceImpl implements ComplaintService {
             throw new ForbiddenException("You can only provide feedback on your own complaints");
         }
 
+        // Phase 10E: Feedback is only valid on RESOLVED complaints — use ValidationException (HTTP 400)
         if (complaint.getStatus() != ComplaintStatus.RESOLVED) {
-            throw new RuntimeException("Feedback allowed only after resolution");
+            throw new ValidationException(
+                "Feedback can only be submitted for RESOLVED complaints. " +
+                "Current status: " + complaint.getStatus().name()
+            );
         }
 
         ComplaintStatus oldStatus = complaint.getStatus();
@@ -653,8 +912,35 @@ public class ComplaintServiceImpl implements ComplaintService {
             throw new ValidationException("Target staff ID is required");
         }
 
+        // Caller authorization check (defense-in-depth)
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getName() != null) {
+            userRepo.findByEmail(auth.getName()).ifPresent(currentUser -> {
+                if (currentUser.getAccountType() == AccountType.STUDENT) {
+                    throw new ForbiddenException("Access denied: students cannot reassign complaint staff");
+                }
+                if (currentUser.getAccountType() == AccountType.STAFF) {
+                    staffRepo.findByUser_UserId(currentUser.getUserId()).ifPresent(currentStaff -> {
+                        boolean callerIsAdmin = isPlatformAdmin(currentStaff, auth);
+                        if (!callerIsAdmin) {
+                            throw new ForbiddenException("Access denied: only administrators can reassign complaint staff");
+                        }
+                    });
+                }
+            });
+        }
+
         Complaint complaint = complaintRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Complaint not found with id: " + id));
+
+        // Phase 10E: Reassignment must not silently resurrect RESOLVED or CLOSED complaints.
+        ComplaintStatus currentStatus = complaint.getStatus();
+        if (currentStatus == ComplaintStatus.RESOLVED || currentStatus == ComplaintStatus.CLOSED) {
+            throw new ValidationException(
+                "Cannot reassign staff on a " + currentStatus.name() + " complaint. " +
+                "Reassignment is only allowed for active complaints (OPEN, IN_PROGRESS, ESCALATED)."
+            );
+        }
 
         StaffInfo targetStaff = staffRepo.findById(req.getStaffId())
                 .orElseThrow(() -> new NotFoundException("Target staff not found with id: " + req.getStaffId()));
@@ -663,11 +949,39 @@ public class ComplaintServiceImpl implements ComplaintService {
             throw new ValidationException("Target staff account is disabled");
         }
 
-        // Validate staff belongs to the complaint's current department (or is global admin)
-        boolean isGlobalAdmin = targetStaff.getRoles() != null && targetStaff.getRoles().stream()
-                .anyMatch(r -> r.getAssignmentScope() == AssignmentScope.GLOBAL || "ADMIN".equalsIgnoreCase(r.getRoleName()));
+        // Validate staff belongs to the complaint's current department, is platform admin, or holds
+        // the specific GLOBAL-scoped workflow role required by the complaint's active workflow step.
+        boolean isPlatformAdmin = targetStaff.getRoles() != null && targetStaff.getRoles().stream()
+                .anyMatch(r -> r.getRoleId() != null && Long.valueOf(1L).equals(r.getRoleId())
+                        && "ADMIN".equalsIgnoreCase(r.getRoleName()));
 
-        if (!isGlobalAdmin) {
+        boolean hasRelevantGlobalWorkflowRole = false;
+        if (!isPlatformAdmin) {
+            Workflow workflow = complaint.getWorkflow();
+            if (workflow == null && complaint.getDepartment() != null && workflowService != null) {
+                try {
+                    workflow = workflowService.findWorkflowForDepartment(complaint.getDepartment()).orElse(null);
+                } catch (Exception ignored) {}
+            }
+            if (workflow != null && workflowService != null) {
+                Integer currentLevel = complaint.getCurrentLevel();
+                int levelToCheck = (currentLevel != null && currentLevel > 0) ? currentLevel : 1;
+                WorkflowStep currentStep = workflowService.findStep(workflow, levelToCheck).orElse(null);
+                if (currentStep != null && currentStep.getRole() != null) {
+                    Role requiredRole = currentStep.getRole();
+                    if (requiredRole.getAssignmentScope() == AssignmentScope.GLOBAL) {
+                        hasRelevantGlobalWorkflowRole = targetStaff.getRoles() != null &&
+                                targetStaff.getRoles().stream().anyMatch(r ->
+                                        (r.getRoleId() != null && r.getRoleId().equals(requiredRole.getRoleId())) ||
+                                        (r.getRoleName() != null && r.getRoleName().equalsIgnoreCase(requiredRole.getRoleName())));
+                    }
+                }
+            }
+        }
+
+        boolean exemptFromDepartmentCheck = isPlatformAdmin || hasRelevantGlobalWorkflowRole;
+
+        if (!exemptFromDepartmentCheck) {
             if (complaint.getDepartment() == null) {
                 throw new ValidationException("Complaint has no assigned department. Please assign a department first.");
             }
@@ -765,6 +1079,82 @@ public class ComplaintServiceImpl implements ComplaintService {
             assignedStaffEmail = complaint.getAssignedTo().getEmail();
         }
 
+        // Determine Workflow & Escalation capabilities
+        Integer currentLevel = complaint.getCurrentLevel() != null ? complaint.getCurrentLevel() : 1;
+        Integer maxLevel = null;
+        boolean canEscalate = false;
+        boolean isFinalAuthority = false;
+        String nextEscalationRole = null;
+        String escalationDisabledReason = null;
+
+        Workflow workflow = complaint.getWorkflow();
+        if (workflow == null && complaint.getDepartment() != null && workflowService != null) {
+            try {
+                workflow = workflowService.findWorkflowForDepartment(complaint.getDepartment()).orElse(null);
+            } catch (Exception ignored) {}
+        }
+
+        ComplaintStatus status = complaint.getStatus();
+        boolean isActiveStatus = (status == ComplaintStatus.OPEN || status == ComplaintStatus.IN_PROGRESS || status == ComplaintStatus.ESCALATED);
+
+        if (workflow == null) {
+            escalationDisabledReason = "No active workflow configured for this department";
+        } else {
+            Integer calculatedMax = null;
+            try {
+                calculatedMax = workflowService.getMaxLevel(workflow);
+            } catch (Exception ignored) {}
+            maxLevel = calculatedMax != null && calculatedMax > 0 ? calculatedMax : null;
+
+            if (maxLevel == null || maxLevel == 0) {
+                escalationDisabledReason = "Workflow has no configured escalation steps";
+            } else if (!isActiveStatus) {
+                escalationDisabledReason = "Escalation is not available for " + (status != null ? status.name() : "inactive") + " complaints";
+            } else if (currentLevel >= maxLevel) {
+                isFinalAuthority = true;
+                escalationDisabledReason = String.format("Complaint is at the final authority level (%d of %d)", currentLevel, maxLevel);
+            } else {
+                int nextLevel = currentLevel + 1;
+                WorkflowStep nextStep = null;
+                try {
+                    nextStep = workflowService.findStep(workflow, nextLevel).orElse(null);
+                } catch (Exception ignored) {}
+
+                if (nextStep == null) {
+                    try {
+                        nextStep = workflowService.getNextStep(workflow, nextLevel);
+                    } catch (Exception ignored) {}
+                }
+
+                if (nextStep == null) {
+                    isFinalAuthority = true;
+                    escalationDisabledReason = String.format("No higher escalation step configured beyond level %d", currentLevel);
+                } else {
+                    Role nextRole = nextStep.getRole();
+                    if (nextRole != null) {
+                        nextEscalationRole = nextRole.getRoleName();
+                        java.util.Optional<StaffInfo> nextStaffOpt = java.util.Optional.empty();
+                        try {
+                            if (assignmentService != null) {
+                                nextStaffOpt = assignmentService.findStaffForRole(complaint, nextRole);
+                            }
+                            if (nextStaffOpt.isEmpty() && staffRepo != null) {
+                                nextStaffOpt = staffRepo.findFirstByRolesContains(nextRole);
+                            }
+                        } catch (Exception ignored) {}
+
+                        if (nextStaffOpt.isPresent()) {
+                            canEscalate = true;
+                        } else {
+                            escalationDisabledReason = String.format("No staff member configured for next authority role '%s'", nextRole.getRoleName());
+                        }
+                    } else {
+                        escalationDisabledReason = "Next escalation step has no assigned role";
+                    }
+                }
+            }
+        }
+
         return ComplaintResponse.builder()
                 .complaintId(complaint.getComplaintId())
                 .title(complaint.getTitle())
@@ -825,8 +1215,75 @@ public class ComplaintServiceImpl implements ComplaintService {
                 // Admin Override Audit Note
                 .adminOverrideNote(complaint.getAdminOverrideNote())
 
+                // Workflow & Escalation Controls
+                .currentLevel(currentLevel)
+                .maxLevel(maxLevel)
+                .canEscalate(canEscalate)
+                .isFinalAuthority(isFinalAuthority)
+                .nextEscalationRole(nextEscalationRole)
+                .escalationDisabledReason(escalationDisabledReason)
+
                 .files(files)
                 .timeline(timeline)
+                .build();
+    }
+
+    /* =========================================
+       SUMMARY MAPPING HELPER — PHASE A.5
+       No per-complaint repository calls.
+       All fields sourced from the eagerly-loaded
+       @ManyToOne associations on the Complaint entity.
+    ========================================= */
+
+    private ComplaintSummaryResponse mapToSummary(Complaint complaint) {
+
+        // student is @ManyToOne (EAGER by JPA default) — no extra query
+        String studentName = complaint.getStudent() != null
+                ? complaint.getStudent().getName()
+                : null;
+
+        // assignedTo is @ManyToOne (EAGER by JPA default) — no extra query
+        String assignedToName = complaint.getAssignedTo() != null
+                ? complaint.getAssignedTo().getName()
+                : null;
+
+        Long assignedStaffId = (complaint.getAssignedTo() != null && complaint.getAssignedTo().getStaffId() != null)
+                ? Long.valueOf(complaint.getAssignedTo().getStaffId())
+                : null;
+
+        // category is @ManyToOne (EAGER by JPA default) — no extra query
+        String categoryName = complaint.getCategory() != null
+                ? complaint.getCategory().getName()
+                : null;
+
+        // department is @ManyToOne (EAGER by JPA default) — no extra query
+        String departmentName = complaint.getDepartment() != null
+                ? complaint.getDepartment().getName()
+                : null;
+
+        Long departmentId = complaint.getDepartment() != null
+                ? complaint.getDepartment().getDepartmentId()
+                : null;
+
+        return ComplaintSummaryResponse.builder()
+                .complaintId(complaint.getComplaintId())
+                .title(complaint.getTitle())
+                .description(complaint.getDescription())
+                .status(complaint.getStatus() != null ? complaint.getStatus().name() : null)
+                .priority(complaint.getPriority() != null ? complaint.getPriority().name() : null)
+                .category(categoryName)
+                .departmentId(departmentId)
+                .department(departmentName)
+                .studentName(studentName)
+                .assignedStaffId(assignedStaffId)
+                .assignedTo(assignedToName)
+                .createdAt(complaint.getCreatedAt())
+                .updatedAt(complaint.getUpdatedAt())
+                .resolvedAt(complaint.getResolvedAt())
+                .mlPredictedClass(complaint.getMlPredictedClass())
+                .mlConfidence(complaint.getMlConfidence() != null ? complaint.getMlConfidence().doubleValue() : null)
+                .mlPredictedPriority(complaint.getMlPredictedPriority())
+                .adminOverrideNote(complaint.getAdminOverrideNote())
                 .build();
     }
 
@@ -851,9 +1308,49 @@ public class ComplaintServiceImpl implements ComplaintService {
         return user.getEmail();
     }
 
+    /**
+     * Phase 10E — Centralized status transition validation.
+     * Enforces the complaint lifecycle state machine.
+     * Null newStatus means the action does not change status (e.g. UPDATE_NOTE, ADMIN_OVERRIDE).
+     *
+     * Valid transitions:
+     *   OPEN        -> IN_PROGRESS, ESCALATED
+     *   IN_PROGRESS -> RESOLVED, ESCALATED
+     *   ESCALATED   -> OPEN, IN_PROGRESS, RESOLVED
+     *   RESOLVED    -> CLOSED (student accept), OPEN (student reject)
+     *   CLOSED      -> (terminal — no outgoing transitions)
+     */
+    private static final Map<ComplaintStatus, Set<ComplaintStatus>> ALLOWED_TRANSITIONS;
+
+    static {
+        Map<ComplaintStatus, Set<ComplaintStatus>> map = new EnumMap<>(ComplaintStatus.class);
+        map.put(ComplaintStatus.OPEN,        EnumSet.of(ComplaintStatus.IN_PROGRESS, ComplaintStatus.ESCALATED));
+        map.put(ComplaintStatus.IN_PROGRESS, EnumSet.of(ComplaintStatus.RESOLVED, ComplaintStatus.ESCALATED));
+        map.put(ComplaintStatus.ESCALATED,   EnumSet.of(ComplaintStatus.OPEN, ComplaintStatus.IN_PROGRESS, ComplaintStatus.RESOLVED));
+        map.put(ComplaintStatus.RESOLVED,    EnumSet.of(ComplaintStatus.CLOSED, ComplaintStatus.OPEN));
+        map.put(ComplaintStatus.CLOSED,      EnumSet.noneOf(ComplaintStatus.class));
+        ALLOWED_TRANSITIONS = Collections.unmodifiableMap(map);
+    }
+
+    private void validateStatusTransition(ComplaintStatus from, ComplaintStatus to) {
+        if (to == null) return; // no-op actions (UPDATE_NOTE, ADMIN_OVERRIDE, STAFF_REASSIGN)
+        Set<ComplaintStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(from, EnumSet.noneOf(ComplaintStatus.class));
+        if (!allowed.contains(to)) {
+            throw new ValidationException(
+                "Invalid status transition: " + from.name() + " -> " + to.name() + ". " +
+                "Allowed transitions from " + from.name() + ": " +
+                (allowed.isEmpty() ? "none (terminal state)" : allowed.toString())
+            );
+        }
+    }
+
     private void validateStaffAccess(Complaint complaint) {
 
         User user = getCurrentUser();
+
+        if (user.getAccountType() == AccountType.STUDENT) {
+            throw new ForbiddenException("Access denied: students cannot perform staff lifecycle actions");
+        }
 
         if (user.getAccountType() == AccountType.STAFF) {
 

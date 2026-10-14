@@ -3,13 +3,18 @@ package com.sgms.sgms_backend.repository;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
 import com.sgms.sgms_backend.enums.Priority;
 import com.sgms.sgms_backend.model.Complaint;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
+public interface ComplaintRepository extends JpaRepository<Complaint, Long>, JpaSpecificationExecutor<Complaint> {
+
+    // ── Existing list-returning methods (unchanged) ────────────────────────────
 
     List<Complaint> findByStudentStudentId(Integer studentId);
 
@@ -28,4 +33,10 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
     int countByWorkflowWorkflowId(Long workflowId);
 
     List<Complaint> findAllByOrderByCreatedAtDesc();
+
+    // ── Phase A.1: Pagination-capable overloads ────────────────────────────────
+
+    Page<Complaint> findByStudentStudentId(Integer studentId, Pageable pageable);
+
+    Page<Complaint> findByAssignedToStaffId(Integer staffId, Pageable pageable);
 }

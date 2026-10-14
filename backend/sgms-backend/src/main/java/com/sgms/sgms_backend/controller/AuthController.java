@@ -71,14 +71,42 @@ public class AuthController {
             StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
                     .orElseThrow(() -> new RuntimeException("Staff not found"));
 
-            if (!staff.getRoles().isEmpty()) {
-                role = staff.getRoles().iterator().next().getRoleName();
+            boolean isPlatformAdmin = staff.getRoles() != null && staff.getRoles().stream()
+                    .anyMatch(r -> r.getRoleId() != null && Long.valueOf(1L).equals(r.getRoleId())
+                            && "ADMIN".equalsIgnoreCase(r.getRoleName()));
+
+            java.util.List<String> designations = staff.getRoles() != null
+                    ? staff.getRoles().stream()
+                            .map(com.sgms.sgms_backend.model.Role::getRoleName)
+                            .filter(r -> !"ADMIN".equalsIgnoreCase(r))
+                            .sorted()
+                            .toList()
+                    : java.util.Collections.emptyList();
+
+            if (isPlatformAdmin) {
+                role = "ADMIN";
+            } else if (!designations.isEmpty()) {
+                role = designations.get(0);
+            } else {
+                role = "STAFF";
             }
 
             staffDTO = new StaffProfileDTO(
                     staff.getStaffId(),
                     staff.getName(),
                     staff.getPhone()
+            );
+
+            return ResponseEntity.ok(
+                    new UserProfileResponse(
+                            user.getUserId(),
+                            user.getEmail(),
+                            user.getAccountType(),
+                            role,
+                            staffDTO,
+                            studentDTO,
+                            designations
+                    )
             );
         }
 

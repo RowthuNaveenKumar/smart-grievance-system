@@ -1,6 +1,10 @@
 package com.sgms.sgms_backend.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sgms.sgms_backend.dto.ErrorResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.*;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,9 +20,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
+    private final ObjectMapper objectMapper;
 
-    public SecurityConfig(JwtFilter jwtFilter) {
+    public SecurityConfig(JwtFilter jwtFilter, ObjectMapper objectMapper) {
         this.jwtFilter = jwtFilter;
+        this.objectMapper = objectMapper;
     }
 
     @Bean
@@ -27,6 +33,29 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
+
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            ErrorResponse errorResponse = new ErrorResponse(
+                                    "Unauthorized: Authentication token is missing, invalid, or expired",
+                                    HttpServletResponse.SC_UNAUTHORIZED,
+                                    System.currentTimeMillis()
+                            );
+                            objectMapper.writeValue(response.getOutputStream(), errorResponse);
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            ErrorResponse errorResponse = new ErrorResponse(
+                                    "Forbidden: Access denied - " + accessDeniedException.getMessage(),
+                                    HttpServletResponse.SC_FORBIDDEN,
+                                    System.currentTimeMillis()
+                            );
+                            objectMapper.writeValue(response.getOutputStream(), errorResponse);
+                        })
+                )
 
                 .authorizeHttpRequests(auth -> auth
                         // allow uploaded files

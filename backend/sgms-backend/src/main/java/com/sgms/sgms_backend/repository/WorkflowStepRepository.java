@@ -19,4 +19,8 @@ public interface WorkflowStepRepository extends JpaRepository<WorkflowStep, Long
     boolean existsByWorkflowWorkflowIdAndLevel(Long workflowId, Integer level);
 
     boolean existsByWorkflowWorkflowIdAndLevelAndStepIdNot(Long workflowId, Integer level, Long stepId);
+
+    boolean existsByRole_RoleId(Long roleId);
+
+    long countByRole_RoleId(Long roleId);
 }
