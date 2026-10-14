@@ -19,9 +19,9 @@ import {
   Mail,
   Lock,
   AlertCircle,
-  ArrowLeft,
   Building2,
 } from "lucide-react";
+import BackButton from "@/components/ui/BackButton";
 import { motion } from "framer-motion";
 import { useUser } from "@/context/UserContext";
 
@@ -85,15 +85,7 @@ export default function Login() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md"
         >
-          <div className="mb-6">
-            <button
-              onClick={() => navigate("/")}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 backdrop-blur-xl hover:bg-white/10 transition-all"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Home
-            </button>
-          </div>
+          <BackButton fallback="/home" />
 
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center h-16 w-16 bg-gradient-to-br from-indigo-500 via-blue-500 to-cyan-500 rounded-2xl mb-4 shadow-xl shadow-indigo-500/30">

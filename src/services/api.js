@@ -1,12 +1,12 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
+  baseURL: import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080",
 });
 
 // ── Request interceptor: attach JWT ──────────────────────────────────────────
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

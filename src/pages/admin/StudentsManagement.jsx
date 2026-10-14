@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Edit, UserX, Users, Plus, ArrowLeft } from "lucide-react";
+import { Search, Edit, UserX, Users, Plus } from "lucide-react";
+import BackButton from "@/components/ui/BackButton";
 import {
   getAllStudents,
   disableStudent,
@@ -74,6 +75,8 @@ export default function StudentsManagement() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
+      <BackButton fallback="/admin-dashboard" />
+
       {/* Header */}
 
       <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
@@ -87,14 +90,6 @@ export default function StudentsManagement() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/admin-dashboard")}
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10 transition-all"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
-
             <div className="bg-indigo-500/20 border border-indigo-500/30 px-4 py-2 rounded-xl">
               <span className="text-indigo-300 font-semibold">
                 {students.length} Students

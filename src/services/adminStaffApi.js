@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api } from "./api.js";
 
 export const getAllStaff = async () => {
   const res = await api.get("/admin/staff");
@@ -22,6 +22,11 @@ export const updateStaff = async (id, data) => {
 
 export const disableStaff = async (id) => {
   const res = await api.patch(`/admin/staff/${id}/disable`);
+  return res.data;
+};
+
+export const enableStaff = async (id) => {
+  const res = await api.patch(`/admin/staff/${id}/enable`);
   return res.data;
 };
 

@@ -21,7 +21,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   ShieldCheck,
   Sparkles,
@@ -33,6 +32,7 @@ import {
   FileText,
   X,
 } from "lucide-react";
+import BackButton from "@/components/ui/BackButton";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function WorkflowsManagement() {
@@ -257,17 +257,11 @@ export default function WorkflowsManagement() {
       <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-purple-400/10 blur-3xl animate-pulse" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <BackButton fallback="/admin-dashboard" />
+
         {/* Navigation & Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => navigate("/admin-dashboard")}
-              className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
             <div>
               <div className="flex items-center gap-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500 shadow-lg shadow-cyan-500/30">

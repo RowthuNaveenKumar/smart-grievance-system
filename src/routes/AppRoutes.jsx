@@ -15,6 +15,7 @@ import ComplaintsManagement from "@/pages/admin/ComplaintsManagement";
 import DepartmentsManagement from "@/pages/admin/DepartmentsManagement";
 import CategoriesManagement from "@/pages/admin/CategoriesManagement";
 import WorkflowsManagement from "@/pages/admin/WorkflowsManagement";
+import DesignationsManagement from "@/pages/admin/DesignationsManagement";
 
 export default function AppRoutes() {
   return (
@@ -119,6 +120,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute role="ADMIN">
               <WorkflowsManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/designations"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <DesignationsManagement />
             </ProtectedRoute>
           }
         />

@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 import {
-  ArrowLeft,
   User,
   FileText,
   AlertTriangle,
@@ -30,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { useUser } from "@/context/UserContext";
+import BackButton from "@/components/ui/BackButton";
 import {
   overrideDepartment,
   reassignStaff,
@@ -62,7 +62,7 @@ export default function ComplaintDetails() {
     if (from === "admin-complaints") return "/admin/complaints";
 
     // Safe role-based fallback when state is absent (direct URL / refresh)
-    if (user?.role === "ADMIN") return "/admin/complaints";
+    if (user?.role === "ADMIN") return "/admin-dashboard";
     if (user?.accountType === "STUDENT") return "/student-dashboard";
     if (user?.accountType === "STAFF") return "/staff-dashboard";
 
@@ -163,10 +163,12 @@ export default function ComplaintDetails() {
           params: { action: "MARK_IN_PROGRESS" },
         },
       );
+      toast.success("Complaint status updated to In Progress");
       setNote("");
       loadComplaint();
     } catch (err) {
       console.error(err);
+      toast.error(err.response?.data?.message || "Failed to update complaint status");
     } finally {
       setActionLoading(false);
     }
@@ -174,7 +176,7 @@ export default function ComplaintDetails() {
 
   const resolveComplaint = async () => {
     if (!note.trim()) {
-      alert("Please add resolution note");
+      toast.error("Please add resolution note");
       return;
     }
     try {
@@ -190,10 +192,12 @@ export default function ComplaintDetails() {
         },
       );
 
+      toast.success("Complaint marked as resolved");
       setNote("");
       loadComplaint();
     } catch (err) {
       console.error(err);
+      toast.error(err.response?.data?.message || "Failed to resolve complaint");
     } finally {
       setActionLoading(false);
     }
@@ -201,7 +205,7 @@ export default function ComplaintDetails() {
 
   const escalateComplaint = async () => {
     if (!note.trim()) {
-      alert("Please provide reason for escalation");
+      toast.error("Please provide reason for escalation");
       return;
     }
     try {
@@ -210,10 +214,12 @@ export default function ComplaintDetails() {
       await api.patch(`/complaints/${id}/escalate`, {
         note,
       });
+      toast.success("Complaint escalated successfully");
       setNote("");
       loadComplaint();
     } catch (err) {
       console.error(err);
+      toast.error(err.response?.data?.message || "Failed to escalate complaint");
     } finally {
       setActionLoading(false);
     }
@@ -356,11 +362,13 @@ export default function ComplaintDetails() {
       <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <BackButton fallback={getBackDestination()} />
+
         <motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-8 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-4 shadow-2xl backdrop-blur-xl"
+          className="mb-8 flex items-center rounded-2xl border border-white/10 bg-white/5 px-5 py-4 shadow-2xl backdrop-blur-xl"
         >
           <div>
             <h2 className="text-lg font-semibold tracking-wide text-white">
@@ -370,15 +378,6 @@ export default function ComplaintDetails() {
               Full grievance information and activity timeline
             </p>
           </div>
-
-          <Button
-            variant="ghost"
-            onClick={() => navigate(getBackDestination())}
-            className="flex items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-slate-300 hover:bg-white/10 hover:text-white"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
         </motion.div>
 
         <motion.div
@@ -570,10 +569,10 @@ export default function ComplaintDetails() {
                 </div>
               )}
 
-              {isStaff && (
+              {((isStaff || (isAdmin && (Boolean(user?.staff?.staffId && complaint?.assignedStaffId && Number(user.staff.staffId) === Number(complaint.assignedStaffId)) || Boolean(user?.email && complaint?.assignedStaffEmail && user.email.toLowerCase() === complaint.assignedStaffEmail.toLowerCase()))))) && (complaint.status === "OPEN" || complaint.status === "IN_PROGRESS") && (
                 <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
                   <h3 className="mb-4 text-lg font-semibold text-white">
-                    Staff Actions
+                    {isAdmin ? "Resolution & Lifecycle Actions" : "Staff Actions"}
                   </h3>
 
                   <textarea
@@ -600,14 +599,36 @@ export default function ComplaintDetails() {
                       </Button>
                     )}
 
-                    {complaint.status != "CLOSED" && (
-                      <Button
-                        disabled={actionLoading}
-                        className="bg-orange-600 hover:bg-orange-700"
-                        onClick={escalateComplaint}
-                      >
-                        Escalate
-                      </Button>
+                    {/* Workflow-Aware Escalation Action */}
+                    {(complaint.status === "OPEN" || complaint.status === "IN_PROGRESS") && (
+                      complaint.canEscalate ? (
+                        <Button
+                          disabled={actionLoading}
+                          className="bg-orange-600 hover:bg-orange-700"
+                          onClick={escalateComplaint}
+                          title={complaint.nextEscalationRole ? `Escalate to ${complaint.nextEscalationRole}` : "Escalate to next authority"}
+                        >
+                          {complaint.nextEscalationRole ? `Escalate to ${complaint.nextEscalationRole}` : "Escalate"}
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          {complaint.isFinalAuthority ? (
+                            <span
+                              data-testid="final-authority-badge"
+                              className="inline-flex items-center rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-300"
+                            >
+                              Final Authority (Level {complaint.currentLevel || 1}/{complaint.maxLevel || 1})
+                            </span>
+                          ) : complaint.escalationDisabledReason ? (
+                            <span
+                              data-testid="escalation-disabled-notice"
+                              className="text-xs text-slate-400 italic"
+                            >
+                              {complaint.escalationDisabledReason}
+                            </span>
+                          ) : null}
+                        </div>
+                      )
                     )}
                   </div>
                 </div>

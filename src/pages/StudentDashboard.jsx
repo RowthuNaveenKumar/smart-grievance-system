@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { api } from "@/services/api";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { getStudentComplaintsPage, getMyComplaints } from "@/services/complaintApi";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import ComplaintCard from "@/components/complaints/ComplaintCard";
+import ComplaintRow from "@/components/complaints/ComplaintRow";
+import Pagination from "@/components/ui/Pagination";
 
 import {
   Layers,
@@ -17,62 +18,186 @@ import {
   ArrowRight,
   FileText,
   GraduationCap,
+  ArrowUpDown,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 
 import { motion } from "framer-motion";
 import { useUser } from "@/context/UserContext";
 
 export default function StudentDashboard() {
-  const { user } = useUser();
-  const [complaints, setComplaints] = useState([]);
+  const { user, loading: userLoading } = useUser();
+  const studentId = user?.student?.studentId;
+
+  // Stream 1: Global summary statistics & counts from existing array endpoint
+  const [summaryStats, setSummaryStats] = useState({
+    total: 0,
+    active: 0,
+    resolved: 0,
+    closed: 0,
+  });
+
+  // Stream 2: Server-side paginated complaints from Spring Page endpoint
+  const [pageData, setPageData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 1,
+    number: 0,
+    size: 10,
+  });
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState(null);
+
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [sortBy, setSortBy] = useState("UPDATED");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const res = await api.get("/complaints/my");
-      setComplaints(res.data);
-    } catch (err) {
-      console.error(err);
+  // Map UI sort keys to backend whitelisted properties
+  const getSortParams = (uiSort) => {
+    switch (uiSort) {
+      case "NEWEST":
+        return { sortBy: "createdAt", direction: "desc" };
+      case "OLDEST":
+        return { sortBy: "createdAt", direction: "asc" };
+      case "PRIORITY":
+        return { sortBy: "priority", direction: "desc" };
+      case "UPDATED":
+      default:
+        return { sortBy: "updatedAt", direction: "desc" };
     }
   };
 
-  const filtered = useMemo(() => {
-    let list = complaints;
+  // Fetch summary stream for overall stats
+  const loadSummaryData = useCallback(async () => {
+    if (userLoading || !studentId) return;
+    try {
+      const data = await getMyComplaints();
+      const list = Array.isArray(data) ? data : [];
+      setSummaryStats({
+        total: list.length,
+        active: list.filter((c) =>
+          ["OPEN", "IN_PROGRESS", "ESCALATED"].includes(c.status)
+        ).length,
+        resolved: list.filter((c) => c.status === "RESOLVED").length,
+        closed: list.filter((c) => c.status === "CLOSED").length,
+      });
+    } catch (err) {
+      console.error("Failed to load student summary stats:", err);
+    }
+  }, [userLoading, studentId]);
+
+  // Fetch paginated server stream
+  const loadPageData = useCallback(
+    async (pageToLoad = currentPage, sortOption = sortBy) => {
+      if (userLoading || !studentId) return;
+
+      try {
+        setPageLoading(true);
+        setPageError(null);
+        const { sortBy: backendSortBy, direction } = getSortParams(sortOption);
+        const data = await getStudentComplaintsPage(studentId, {
+          page: pageToLoad - 1, // Convert 1-based UI to 0-based Spring Page
+          size: pageSize,
+          sortBy: backendSortBy,
+          direction,
+        });
+
+        setPageData({
+          content: Array.isArray(data?.content) ? data.content : [],
+          totalElements: typeof data?.totalElements === "number" ? data.totalElements : 0,
+          totalPages: Math.max(1, data?.totalPages || 1),
+          number: data?.number || 0,
+          size: data?.size || pageSize,
+        });
+      } catch (err) {
+        console.error("Failed to load student complaints page:", err);
+        setPageError("Failed to load complaints. Please try again.");
+      } finally {
+        setPageLoading(false);
+      }
+    },
+    [userLoading, studentId, currentPage, sortBy, pageSize]
+  );
+
+  // Load summary once user authentication is resolved
+  useEffect(() => {
+    if (!userLoading && studentId) {
+      loadSummaryData();
+    }
+  }, [userLoading, studentId, loadSummaryData]);
+
+  // Load paginated data on page or sort changes
+  useEffect(() => {
+    if (!userLoading && studentId) {
+      loadPageData(currentPage, sortBy);
+    }
+  }, [userLoading, studentId, currentPage, sortBy, loadPageData]);
+
+  // Safe page boundary clamping if totalPages shrinks
+  useEffect(() => {
+    if (pageData.totalPages > 0 && currentPage > pageData.totalPages) {
+      setCurrentPage(pageData.totalPages);
+    }
+  }, [pageData.totalPages, currentPage]);
+
+  // Handle Sort Change (resets to page 1)
+  const handleSortChange = (newSort) => {
+    setSortBy(newSort);
+    setCurrentPage(1);
+  };
+
+  // Handle Page Change with smooth scroll
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > pageData.totalPages || newPage === currentPage) return;
+    setCurrentPage(newPage);
+    document
+      .getElementById("complaints-section")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  // Client-side search and status filter applied to current page content
+  const displayedComplaints = useMemo(() => {
+    let list = pageData.content || [];
 
     if (filter === "ACTIVE") {
-      list = list.filter((c) => c.status === "OPEN");
-    }
-
-    if (filter === "RESOLVED") {
+      list = list.filter((c) =>
+        ["OPEN", "IN_PROGRESS", "ESCALATED"].includes(c.status)
+      );
+    } else if (filter === "RESOLVED") {
       list = list.filter((c) => c.status === "RESOLVED");
-    }
-
-    if (filter === "CLOSED") {
+    } else if (filter === "CLOSED") {
       list = list.filter((c) => c.status === "CLOSED");
     }
 
-    if (search) {
-      list = list.filter((c) =>
-        c.title.toLowerCase().includes(search.toLowerCase()),
-      );
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((c) => {
+        const matchId =
+          String(c.complaintId || "").toLowerCase().includes(q) ||
+          `#${c.complaintId}`.toLowerCase().includes(q);
+        const matchTitle = (c.title || "").toLowerCase().includes(q);
+        const matchCategory = (c.category || "").toLowerCase().includes(q);
+        const matchDesc = (c.description || "").toLowerCase().includes(q);
+        return matchId || matchTitle || matchCategory || matchDesc;
+      });
     }
 
     return list;
-  }, [complaints, search, filter]);
+  }, [pageData.content, filter, search]);
+
+  const isFilteringActive = filter !== "ALL" || search.trim().length > 0;
 
   const stats = {
-    total: complaints.length,
-    active: complaints.filter((c) => c.status === "OPEN").length,
-    resolved: complaints.filter((c) => c.status === "RESOLVED").length,
-    closed: complaints.filter((c) => c.status === "CLOSED").length,
+    total: summaryStats.total,
+    active: summaryStats.active,
+    resolved: summaryStats.resolved,
+    closed: summaryStats.closed,
   };
 
   return (
@@ -383,7 +508,8 @@ export default function StudentDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9 }}
         >
-          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          {/* Section header + sort controls */}
+          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-2xl font-bold text-white sm:text-3xl">
                 Your Complaints
@@ -393,35 +519,104 @@ export default function StudentDashboard() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-              Showing{" "}
-              <span className="font-semibold text-white">
-                {filtered.length}
-              </span>{" "}
-              complaint{filtered.length !== 1 ? "s" : ""}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Sort control */}
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-xl">
+                <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span className="text-xs text-slate-400 whitespace-nowrap">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value)}
+                  className="bg-transparent text-sm text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="UPDATED" className="bg-slate-900">Last Updated</option>
+                  <option value="NEWEST" className="bg-slate-900">Newest First</option>
+                  <option value="OLDEST" className="bg-slate-900">Oldest First</option>
+                  <option value="PRIORITY" className="bg-slate-900">Priority</option>
+                </select>
+              </div>
+
+              {/* Count badge */}
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-300 whitespace-nowrap">
+                {isFilteringActive ? (
+                  <span>
+                    <span className="font-semibold text-white">{displayedComplaints.length}</span>{" "}
+                    matching on page {currentPage}
+                  </span>
+                ) : (
+                  <span>
+                    <span className="font-semibold text-white">{pageData.totalElements}</span>{" "}
+                    complaint{pageData.totalElements !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {filtered.length > 0 ? (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {filtered.map((c, index) => (
-                <motion.div
-                  key={c.complaintId}
-                  initial={{ opacity: 0, y: 22 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: index * 0.05 }}
-                >
-                  <ComplaintCard
-                    complaint={c}
-                    onClick={() =>
-                      navigate(`/complaint/${c.complaintId}`, {
-                        state: { from: "student-dashboard" },
-                      })
-                    }
-                  />
-                </motion.div>
+          {/* Filter notice if client-side search/filter is active on page */}
+          {isFilteringActive && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-2.5 text-xs text-indigo-300">
+              <Info className="h-4 w-4 shrink-0 text-indigo-400" />
+              <span>
+                Filtering applied to current page ({displayedComplaints.length} of {pageData.content.length} displayed). Multi-page search and status filtering are planned for a future release.
+              </span>
+            </div>
+          )}
+
+          {pageLoading ? (
+            <div className="flex flex-col gap-2 mb-6">
+              {[...Array(3)].map((_, i) => (
+                <div
+                  key={i}
+                  className="h-20 rounded-2xl border border-white/5 bg-white/5 animate-pulse"
+                />
               ))}
             </div>
+          ) : pageError ? (
+            <div className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-6 text-center text-rose-300 backdrop-blur-xl">
+              <p className="text-sm font-medium">{pageError}</p>
+              <Button
+                onClick={() => loadPageData(currentPage, sortBy)}
+                variant="outline"
+                size="sm"
+                className="mt-3 rounded-xl border-rose-500/30 bg-rose-500/20 text-xs text-rose-200 hover:bg-rose-500/30"
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Retry
+              </Button>
+            </div>
+          ) : displayedComplaints.length > 0 ? (
+            <>
+              {/* Compact row list */}
+              <div className="flex flex-col gap-2 mb-6">
+                {displayedComplaints.map((c, index) => (
+                  <motion.div
+                    key={c.complaintId}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: index * 0.03 }}
+                  >
+                    <ComplaintRow
+                      complaint={c}
+                      onClick={() =>
+                        navigate(`/complaint/${c.complaintId}`, {
+                          state: { from: "student-dashboard" },
+                        })
+                      }
+                    />
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={pageData.totalPages}
+                onPageChange={handlePageChange}
+                totalItems={pageData.totalElements}
+                pageSize={pageSize}
+              />
+            </>
           ) : (
             <div className="rounded-[2rem] border border-dashed border-white/15 bg-white/6 p-12 text-center backdrop-blur-xl">
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-white/10">
@@ -433,8 +628,9 @@ export default function StudentDashboard() {
               </h3>
 
               <p className="mx-auto mb-8 max-w-xl leading-7 text-slate-400">
-                There are no complaints matching your current search or filter.
-                Try another keyword or submit a new grievance to get started.
+                {isFilteringActive
+                  ? "No complaints match your filter on this page. Try resetting your filter or navigating between pages."
+                  : "There are no complaints recorded yet. Submit a new grievance to get started."}
               </p>
 
               <Button

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -6,7 +6,6 @@ import {
   FileText,
   Search,
   Filter,
-  ArrowLeft,
   Sparkles,
   ShieldCheck,
   Building2,
@@ -24,9 +23,11 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import BackButton from "@/components/ui/BackButton";
+import Pagination from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/input";
 import {
-  getAllComplaints,
+  getAdminComplaintsPage,
   overrideDepartment,
   reassignStaff,
   getDepartments,
@@ -36,7 +37,15 @@ import {
 export default function ComplaintsManagement() {
   const navigate = useNavigate();
 
-  const [complaints, setComplaints] = useState([]);
+  const [pageData, setPageData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 1,
+    number: 0,
+    size: 10,
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -61,57 +70,89 @@ export default function ComplaintsManagement() {
   const [reassignLoading, setReassignLoading] = useState(false);
   const [reassignSubmitting, setReassignSubmitting] = useState(false);
 
+  // Load departments once on mount
   useEffect(() => {
-    loadData();
+    loadDepartments();
   }, []);
 
-  const loadData = async () => {
+  const loadDepartments = async () => {
     try {
-      setLoading(true);
-      const [complaintsData, deptsData] = await Promise.all([
-        getAllComplaints(),
-        getDepartments(),
-      ]);
-      setComplaints(complaintsData || []);
+      const deptsData = await getDepartments();
       setDepartments(deptsData || []);
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to load complaints");
-    } finally {
-      setLoading(false);
+      console.error("Failed to load departments:", err);
     }
   };
 
-  const filteredComplaints = useMemo(() => {
-    return complaints.filter((c) => {
-      // Search match
-      const query = search.toLowerCase();
-      const matchSearch =
-        !search ||
-        c.title?.toLowerCase().includes(query) ||
-        c.description?.toLowerCase().includes(query) ||
-        c.studentName?.toLowerCase().includes(query) ||
-        String(c.complaintId).includes(query);
+  // Load paginated complaints from server
+  const loadComplaintsPage = useCallback(
+    async (pageToLoad = currentPage) => {
+      try {
+        setLoading(true);
+        const data = await getAdminComplaintsPage({
+          page: pageToLoad - 1, // 1-based UI to 0-based Spring Page
+          size: pageSize,
+          sortBy: "createdAt",
+          direction: "DESC",
+          status: statusFilter !== "ALL" ? statusFilter : undefined,
+          priority: priorityFilter !== "ALL" ? priorityFilter : undefined,
+          departmentId: deptFilter !== "ALL" ? Number(deptFilter) : undefined,
+        });
 
-      // Status match
-      const matchStatus =
-        statusFilter === "ALL" ||
-        (c.status || "").toUpperCase() === statusFilter;
+        setPageData({
+          content: Array.isArray(data?.content) ? data.content : [],
+          totalElements: typeof data?.totalElements === "number" ? data.totalElements : 0,
+          totalPages: Math.max(1, data?.totalPages || 1),
+          number: data?.number || 0,
+          size: data?.size || pageSize,
+        });
+      } catch (err) {
+        console.error("Failed to load complaints page:", err);
+        toast.error("Failed to load complaints");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentPage, pageSize, statusFilter, deptFilter, priorityFilter]
+  );
 
-      // Department match
-      const matchDept =
-        deptFilter === "ALL" ||
-        String(c.departmentId) === String(deptFilter) ||
-        (c.department || "").toLowerCase() === deptFilter.toLowerCase();
+  useEffect(() => {
+    loadComplaintsPage(currentPage);
+  }, [currentPage, statusFilter, deptFilter, priorityFilter, loadComplaintsPage]);
 
-      // Priority match
-      const matchPriority =
-        priorityFilter === "ALL" ||
-        (c.priority || "").toUpperCase() === priorityFilter;
+  // Safe page boundary clamping if totalPages shrinks
+  useEffect(() => {
+    if (pageData.totalPages > 0 && currentPage > pageData.totalPages) {
+      setCurrentPage(pageData.totalPages);
+    }
+  }, [pageData.totalPages, currentPage]);
 
-      return matchSearch && matchStatus && matchDept && matchPriority;
-    });
-  }, [complaints, search, statusFilter, deptFilter, priorityFilter]);
+  const handleStatusFilterChange = (val) => {
+    setStatusFilter(val);
+    setCurrentPage(1);
+  };
+
+  const handleDeptFilterChange = (val) => {
+    setDeptFilter(val);
+    setCurrentPage(1);
+  };
+
+  const handlePriorityFilterChange = (val) => {
+    setPriorityFilter(val);
+    setCurrentPage(1);
+  };
+
+  // Explicitly scoped to the currently loaded page
+  const displayedComplaints = useMemo(() => {
+    if (!search.trim()) return pageData.content;
+    const query = search.toLowerCase();
+    return pageData.content.filter((c) =>
+      c.title?.toLowerCase().includes(query) ||
+      c.description?.toLowerCase().includes(query) ||
+      c.studentName?.toLowerCase().includes(query) ||
+      String(c.complaintId).includes(query)
+    );
+  }, [pageData.content, search]);
 
   // Open Override Modal
   const openOverrideModal = (complaint) => {
@@ -140,7 +181,7 @@ export default function ComplaintsManagement() {
       });
       toast.success("Department overridden successfully");
       setOverrideModalOpen(false);
-      loadData();
+      loadComplaintsPage(currentPage);
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || "Failed to override department");
@@ -187,7 +228,7 @@ export default function ComplaintsManagement() {
       });
       toast.success("Staff reassigned successfully");
       setReassignModalOpen(false);
-      loadData();
+      loadComplaintsPage(currentPage);
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || "Failed to reassign staff");
@@ -235,16 +276,11 @@ export default function ComplaintsManagement() {
       <div className="absolute top-1/3 -right-20 h-96 w-96 rounded-full bg-blue-500/15 blur-3xl" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <BackButton fallback="/admin-dashboard" />
+
         {/* Top Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-white/10 bg-white/5 px-6 py-4 backdrop-blur-xl shadow-2xl">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => navigate("/admin-dashboard")}
-              className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 hover:bg-white/10 hover:text-white"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
             <div>
               <h1 className="text-xl font-bold text-white flex items-center gap-2">
                 <FileText className="h-5 w-5 text-indigo-400" />
@@ -258,10 +294,10 @@ export default function ComplaintsManagement() {
 
           <div className="flex items-center gap-3">
             <div className="rounded-xl border border-white/10 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-300">
-              Total: <span className="font-semibold text-indigo-300">{complaints.length}</span>
+              Total: <span className="font-semibold text-indigo-300">{pageData.totalElements}</span>
             </div>
             <Button
-              onClick={loadData}
+              onClick={() => loadComplaintsPage(currentPage)}
               variant="outline"
               size="sm"
               className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10 text-xs"
@@ -275,11 +311,11 @@ export default function ComplaintsManagement() {
         {/* Filter Controls Bar */}
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl shadow-lg">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Search Input */}
+            {/* Search Input (Explicitly scoped to loaded page) */}
             <div className="relative">
               <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search ID, title, student..."
+                placeholder="Filter loaded page (ID, title)..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 bg-slate-900/60 border-white/10 text-sm rounded-xl text-white placeholder:text-slate-500"
@@ -290,7 +326,7 @@ export default function ComplaintsManagement() {
             <div>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
                 className="w-full h-10 px-3 rounded-xl border border-white/10 bg-slate-900/60 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="ALL">All Statuses</option>
@@ -306,7 +342,7 @@ export default function ComplaintsManagement() {
             <div>
               <select
                 value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
+                onChange={(e) => handleDeptFilterChange(e.target.value)}
                 className="w-full h-10 px-3 rounded-xl border border-white/10 bg-slate-900/60 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="ALL">All Departments</option>
@@ -322,7 +358,7 @@ export default function ComplaintsManagement() {
             <div>
               <select
                 value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
+                onChange={(e) => handlePriorityFilterChange(e.target.value)}
                 className="w-full h-10 px-3 rounded-xl border border-white/10 bg-slate-900/60 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="ALL">All Priorities</option>
@@ -333,6 +369,21 @@ export default function ComplaintsManagement() {
               </select>
             </div>
           </div>
+
+          {search.trim() && (
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-white/5 pt-3">
+              <span>
+                Filtering visible complaints on page {currentPage} for: <strong className="text-white">"{search}"</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="text-indigo-400 hover:text-indigo-300 underline"
+              >
+                Clear page filter
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Complaint Cards List */}
@@ -341,15 +392,33 @@ export default function ComplaintsManagement() {
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-r-transparent" />
             <p className="text-slate-300">Loading complaints registry...</p>
           </div>
-        ) : filteredComplaints.length === 0 ? (
+        ) : displayedComplaints.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-16 text-center backdrop-blur-xl">
             <FileText className="mx-auto mb-3 h-12 w-12 text-slate-500" />
-            <h3 className="text-lg font-semibold text-white">No complaints match your filters</h3>
-            <p className="mt-1 text-sm text-slate-400">Try adjusting your search criteria or resetting filters</p>
+            <h3 className="text-lg font-semibold text-white">
+              {search.trim()
+                ? "No complaints on this page match your search"
+                : "No complaints match your filters"}
+            </h3>
+            <p className="mt-1 text-sm text-slate-400">
+              {search.trim()
+                ? "Search is scoped to the currently loaded page. Clear search or navigate other pages."
+                : "Try adjusting your status, department, or priority filters."}
+            </p>
+            {search.trim() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSearch("")}
+                className="mt-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 text-xs"
+              >
+                Clear page filter
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredComplaints.map((c) => (
+            {displayedComplaints.map((c) => (
               <motion.div
                 key={c.complaintId}
                 layout
@@ -446,6 +515,17 @@ export default function ComplaintsManagement() {
                 </div>
               </motion.div>
             ))}
+
+            {/* Pagination Controls */}
+            <div className="pt-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={pageData.totalPages}
+                totalItems={pageData.totalElements}
+                pageSize={pageData.size || pageSize}
+                onPageChange={(p) => setCurrentPage(p)}
+              />
+            </div>
           </div>
         )}
       </div>

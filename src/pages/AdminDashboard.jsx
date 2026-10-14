@@ -17,6 +17,7 @@ import {
   Sparkles,
   ArrowRight,
   BarChart3,
+  Award,
 } from "lucide-react";
 
 import { motion } from "framer-motion";
@@ -45,34 +46,30 @@ export default function AdminDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const complaintsRes = await api.get("/complaints");
-      const departmentsRes = await api.get("/departments");
-      const staffRes = await api.get("/admin/staff");
+      const [statsRes, recentRes, departmentsRes, staffRes] = await Promise.all([
+        api.get("/admin/dashboard/stats"),
+        api.get("/complaints/page", {
+          params: { page: 0, size: 5, sortBy: "createdAt", direction: "DESC" },
+        }),
+        api.get("/departments"),
+        api.get("/admin/staff"),
+      ]);
 
-      const complaints = complaintsRes.data || [];
+      const dashboardStats = statsRes.data || {};
+      const recentPage = recentRes.data || {};
       const departments = departmentsRes.data || [];
       const staff = staffRes.data || [];
 
-      const activeComplaints = complaints.filter((c) =>
-        ["submitted", "assigned", "in_progress", "info_requested"].includes(
-          c.status,
-        ),
-      );
-
-      const resolvedComplaints = complaints.filter(
-        (c) => c.status === "resolved" || c.status === "closed",
-      );
-
       setStats({
-        totalComplaints: complaints.length,
-        activeComplaints: activeComplaints.length,
-        resolvedComplaints: resolvedComplaints.length,
+        totalComplaints: dashboardStats.totalComplaints ?? 0,
+        activeComplaints: dashboardStats.activeComplaints ?? 0,
+        resolvedComplaints: dashboardStats.resolvedComplaints ?? 0,
         totalDepartments: departments.length,
-        totalStaff: staff.length,
+        totalStaff: dashboardStats.totalStaff ?? staff.length,
         avgResolutionTime: "48h",
       });
 
-      setRecentComplaints(complaints.slice(0, 5));
+      setRecentComplaints(Array.isArray(recentPage.content) ? recentPage.content : []);
     } catch (error) {
       console.error("Error loading dashboard:", error);
     } finally {
@@ -122,6 +119,13 @@ export default function AdminDashboard() {
       icon: GitBranch,
       action: () => navigate("/admin/workflows"),
       color: "from-cyan-400 via-blue-500 to-indigo-600",
+    },
+    {
+      title: "Designations",
+      description: "Manage university business designations, scopes & staff assignments",
+      icon: Award,
+      action: () => navigate("/admin/designations"),
+      color: "from-amber-400 via-rose-500 to-indigo-600",
     },
   ];
 
@@ -404,50 +408,55 @@ export default function AdminDashboard() {
             </div>
           ) : recentComplaints.length > 0 ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {recentComplaints.map((complaint, index) => (
-                <motion.div
-                  key={complaint.id}
-                  initial={{ opacity: 0, y: 22 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="rounded-[1.75rem] border border-white/10 bg-white/8 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">
-                        {complaint.title}
-                      </h3>
-                      <p className="mt-2 text-sm text-slate-400">
-                        {complaint.student_name || "Unknown Student"}
-                      </p>
+              {recentComplaints.map((complaint, index) => {
+                const complaintId = complaint.complaintId || complaint.id;
+                const studentDisplayName =
+                  complaint.studentName || complaint.student_name || "Unknown Student";
+                return (
+                  <motion.div
+                    key={complaintId || index}
+                    initial={{ opacity: 0, y: 22 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: index * 0.05 }}
+                    className="rounded-[1.75rem] border border-white/10 bg-white/8 p-6 shadow-lg backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">
+                          {complaint.title}
+                        </h3>
+                        <p className="mt-2 text-sm text-slate-400">
+                          {studentDisplayName}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${getStatusStyle(
+                          complaint.status,
+                        )}`}
+                      >
+                        {complaint.status?.replace("_", " ")}
+                      </span>
                     </div>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${getStatusStyle(
-                        complaint.status,
-                      )}`}
+                    <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-300">
+                      {complaint.description || "No description available"}
+                    </p>
+
+                    <Button
+                      onClick={() =>
+                        navigate(`/complaint/${complaintId}`, {
+                          state: { from: "admin-dashboard" },
+                        })
+                      }
+                      className="mt-5 h-11 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-5 font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-[1.01]"
                     >
-                      {complaint.status?.replace("_", " ")}
-                    </span>
-                  </div>
-
-                  <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-300">
-                    {complaint.description || "No description available"}
-                  </p>
-
-                  <Button
-                    onClick={() =>
-                      navigate(`/complaint/${complaint.id}`, {
-                        state: { from: "admin-dashboard" },
-                      })
-                    }
-                    className="mt-5 h-11 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 px-5 font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-[1.01]"
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    View Details
-                  </Button>
-                </motion.div>
-              ))}
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      View Details
+                    </Button>
+                  </motion.div>
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-[2rem] border border-dashed border-white/15 bg-white/6 p-12 text-center backdrop-blur-xl">

@@ -17,11 +17,11 @@ import {
   FileText,
   Loader2,
   CheckCircle2,
-  ArrowLeft,
   BrainCircuit,
   AlertTriangle,
   Stars,
 } from "lucide-react";
+import BackButton from "@/components/ui/BackButton";
 
 import { motion } from "framer-motion";
 
@@ -177,11 +177,13 @@ export default function SubmitComplaint() {
       <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl animate-pulse" />
 
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-8">
+        <BackButton fallback="/student-dashboard" />
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl shadow-2xl"
+          className="mb-8 flex items-center rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl shadow-2xl"
         >
           <div>
             <h2 className="text-lg font-semibold text-white">
@@ -191,14 +193,6 @@ export default function SubmitComplaint() {
               Smart grievance submission with AI routing
             </p>
           </div>
-
-          <button
-            onClick={() => navigate("/student-dashboard")}
-            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
         </motion.div>
 
         <motion.div

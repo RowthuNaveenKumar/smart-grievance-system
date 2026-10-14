@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ArrowLeft,
   Users,
   Layers,
   FileText,
@@ -25,6 +24,7 @@ import {
   Sparkles,
   ShieldCheck,
 } from "lucide-react";
+import BackButton from "@/components/ui/BackButton";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function DepartmentsManagement() {
@@ -184,17 +184,11 @@ export default function DepartmentsManagement() {
       <div className="absolute top-1/3 -right-20 h-[28rem] w-[28rem] rounded-full bg-blue-500/20 blur-3xl" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <BackButton fallback="/admin-dashboard" />
+
         {/* Navigation & Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <Button
-              onClick={() => navigate("/admin-dashboard")}
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-            >
-              <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Dashboard
-            </Button>
             <Button
               onClick={() => navigate("/admin/categories")}
               variant="outline"
