@@ -31,6 +31,31 @@ public class ComplaintWorkflowService {
                 .orElseThrow(() -> new NotFoundException("Active workflow not found for department: " + department.getName()));
     }
 
+    public java.util.Optional<Workflow> findWorkflowForDepartment(Department department) {
+        if (department == null || department.getDepartmentId() == null) {
+            return java.util.Optional.empty();
+        }
+        return workflowRepo.findByDepartmentDepartmentIdAndActiveTrue(department.getDepartmentId());
+    }
+
+    public java.util.Optional<WorkflowStep> findStep(Workflow workflow, Integer level) {
+        if (workflow == null || workflow.getWorkflowId() == null || level == null) {
+            return java.util.Optional.empty();
+        }
+        return workflowStepRepo.findByWorkflowWorkflowIdAndLevel(workflow.getWorkflowId(), level);
+    }
+
+    public Integer getMaxLevel(Workflow workflow) {
+        if (workflow == null || workflow.getWorkflowId() == null) {
+            return 0;
+        }
+        java.util.List<WorkflowStep> steps = workflowStepRepo.findByWorkflowWorkflowIdOrderByLevelAsc(workflow.getWorkflowId());
+        if (steps == null || steps.isEmpty()) {
+            return 0;
+        }
+        return steps.get(steps.size() - 1).getLevel();
+    }
+
     public WorkflowStep getNextStep(Workflow workflow, Integer level) {
         if (workflow == null) {
             throw new NotFoundException("Workflow is null");

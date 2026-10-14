@@ -23,7 +23,8 @@ public class RoleController {
                 .stream()
                 .map(r -> new RoleResponse(
                         r.getRoleId(),
-                        r.getRoleName()
+                        r.getRoleName(),
+                        r.getAssignmentScope()
                 ))
                 .toList();
     }
@@ -39,7 +40,8 @@ public class RoleController {
                 )
                 .map(r -> new RoleResponse(
                         r.getRoleId(),
-                        r.getRoleName()
+                        r.getRoleName(),
+                        r.getAssignmentScope()
                 ))
                 .toList();
     }

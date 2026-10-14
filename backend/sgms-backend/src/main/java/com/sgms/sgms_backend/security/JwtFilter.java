@@ -10,8 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.sgms.sgms_backend.repository.UserRepository;
 
 import java.io.IOException;
 import java.util.List;
@@ -22,9 +25,16 @@ public class JwtFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(JwtFilter.class);
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepo;
+
+    @Autowired
+    public JwtFilter(JwtUtil jwtUtil, UserRepository userRepo) {
+        this.jwtUtil = jwtUtil;
+        this.userRepo = userRepo;
+    }
 
     public JwtFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
+        this(jwtUtil, null);
     }
 
     @Override
@@ -44,20 +54,40 @@ public class JwtFilter extends OncePerRequestFilter {
 
                 String email = claims.getSubject();
 
+                // Real-time account status verification:
+                // Immediately reject requests from disabled accounts so previously issued
+                // JWTs cannot be used after deactivation.
+                if (userRepo != null && email != null) {
+                    var userOpt = userRepo.findByEmail(email);
+                    if (userOpt.isPresent() && !userOpt.get().isEnabled()) {
+                        log.warn("Access rejected for disabled account: {}", email);
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                }
+
                 String role = claims.get("role", String.class);
                 String subRole = claims.get("subRole", String.class);
 
                 List<SimpleGrantedAuthority> authorities =
                         new java.util.ArrayList<>();
 
-                authorities.add(
-                        new SimpleGrantedAuthority("ROLE_" + role)
-                );
-
-                if (subRole != null) {
+                if (role != null) {
                     authorities.add(
-                            new SimpleGrantedAuthority("ROLE_" + subRole)
+                            new SimpleGrantedAuthority("ROLE_" + role)
                     );
+                }
+
+                // Platform administrator authority:
+                // Granted when the verified token carries the ADMIN role/subRole.
+                // Dynamic workflow designations (e.g. WARDEN, HOD, DEAN, PROCTOR)
+                // are business workflow roles and must NOT be granted as Spring Security authorities.
+                if ("ADMIN".equalsIgnoreCase(subRole) || "ADMIN".equalsIgnoreCase(role)) {
+                    if (!"ADMIN".equalsIgnoreCase(role)) {
+                        authorities.add(
+                                new SimpleGrantedAuthority("ROLE_ADMIN")
+                        );
+                    }
                 }
 
                 UsernamePasswordAuthenticationToken auth =

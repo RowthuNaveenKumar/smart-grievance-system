@@ -34,6 +34,14 @@ public class ComplaintResponse {
     // Admin Override Audit Note
     private String adminOverrideNote;
 
+    // Workflow & Escalation Controls
+    private Integer currentLevel;
+    private Integer maxLevel;
+    private Boolean canEscalate;
+    private Boolean isFinalAuthority;
+    private String nextEscalationRole;
+    private String escalationDisabledReason;
+
     private List<String> files;
     private List<TimelineResponse> timeline;
 }

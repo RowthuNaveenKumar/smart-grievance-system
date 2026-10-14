@@ -6,21 +6,28 @@ import com.sgms.sgms_backend.dto.staff.CreateStaffRequest;
 import com.sgms.sgms_backend.dto.staff.StaffResponse;
 import com.sgms.sgms_backend.dto.staff.UpdateStaffRequest;
 import com.sgms.sgms_backend.enums.AccountType;
+import com.sgms.sgms_backend.enums.AssignmentScope;
 import com.sgms.sgms_backend.enums.ComplaintStatus;
+import com.sgms.sgms_backend.exception.NotFoundException;
+import com.sgms.sgms_backend.exception.ValidationException;
 import com.sgms.sgms_backend.model.*;
 import com.sgms.sgms_backend.repository.*;
 import com.sgms.sgms_backend.service.AdminManagementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 @Service
-@RequiredArgsConstructor
 public class AdminManagementServiceImpl implements AdminManagementService {
+
+    public static final Long SYSTEM_ADMIN_ROLE_ID = 1L;
+    public static final String SYSTEM_ADMIN_ROLE_NAME = "ADMIN";
 
     private final UserRepository userRepo;
     private final StudentInfoRepository studentRepo;
@@ -33,6 +40,30 @@ public class AdminManagementServiceImpl implements AdminManagementService {
     private final DepartmentRepository departmentRepo;
     private final HostelFloorRepository floorRepo;
     private final ComplaintRepository complaintRepo;
+
+    public AdminManagementServiceImpl(
+            UserRepository userRepo,
+            StudentInfoRepository studentRepo,
+            AcademicDivisionRepository divisionRepo,
+            RoomRepository roomRepo,
+            PasswordEncoder passwordEncoder,
+            StaffInfoRepository staffRepo,
+            RoleRepository roleRepo,
+            DepartmentRepository departmentRepo,
+            HostelFloorRepository floorRepo,
+            ComplaintRepository complaintRepo
+    ) {
+        this.userRepo = userRepo;
+        this.studentRepo = studentRepo;
+        this.divisionRepo = divisionRepo;
+        this.roomRepo = roomRepo;
+        this.passwordEncoder = passwordEncoder;
+        this.staffRepo = staffRepo;
+        this.roleRepo = roleRepo;
+        this.departmentRepo = departmentRepo;
+        this.floorRepo = floorRepo;
+        this.complaintRepo = complaintRepo;
+    }
 
     @Override
     public StudentCreateResponse createStudent(CreateStudentRequest req) {
@@ -215,12 +246,76 @@ public class AdminManagementServiceImpl implements AdminManagementService {
     /* =========================================
        STAFF
     ========================================= */
+    private boolean requiresDepartment(Set<Role> roles) {
+        if (roles == null) return false;
+        return roles.stream().anyMatch(r ->
+                r.getAssignmentScope() == AssignmentScope.DEPARTMENT ||
+                "HOD".equalsIgnoreCase(r.getRoleName()));
+    }
+
+    private String getRoleRequiringDepartment(Set<Role> roles) {
+        if (roles == null) return "Designation";
+        return roles.stream()
+                .filter(r -> r.getAssignmentScope() == AssignmentScope.DEPARTMENT || "HOD".equalsIgnoreCase(r.getRoleName()))
+                .map(Role::getRoleName)
+                .findFirst()
+                .orElse("Designation");
+    }
+
+    private boolean requiresDivision(Set<Role> roles) {
+        if (roles == null) return false;
+        return roles.stream().anyMatch(r ->
+                r.getAssignmentScope() == AssignmentScope.DIVISION ||
+                "MFT".equalsIgnoreCase(r.getRoleName()));
+    }
+
+    private String getRoleRequiringDivision(Set<Role> roles) {
+        if (roles == null) return "Designation";
+        return roles.stream()
+                .filter(r -> r.getAssignmentScope() == AssignmentScope.DIVISION || "MFT".equalsIgnoreCase(r.getRoleName()))
+                .map(Role::getRoleName)
+                .findFirst()
+                .orElse("Designation");
+    }
+
+    private boolean requiresFloor(Set<Role> roles) {
+        if (roles == null) return false;
+        return roles.stream().anyMatch(r ->
+                r.getAssignmentScope() == AssignmentScope.FLOOR ||
+                "WARDEN".equalsIgnoreCase(r.getRoleName()));
+    }
+
+    private String getRoleRequiringFloor(Set<Role> roles) {
+        if (roles == null) return "Designation";
+        return roles.stream()
+                .filter(r -> r.getAssignmentScope() == AssignmentScope.FLOOR || "WARDEN".equalsIgnoreCase(r.getRoleName()))
+                .map(Role::getRoleName)
+                .findFirst()
+                .orElse("Designation");
+    }
+
     @Override
+    @Transactional
     public StaffResponse createStaff(CreateStaffRequest req) {
 
         if (userRepo.existsByEmail(req.getEmail())) {
-            throw new RuntimeException(
+            throw new ValidationException(
                     "Email already exists"
+            );
+        }
+
+        if (req.getRoleIds() == null || req.getRoleIds().isEmpty()) {
+            throw new ValidationException("At least one designation is required");
+        }
+
+        Set<Role> roles =
+                new HashSet<>(
+                        roleRepo.findAllById(req.getRoleIds())
+                );
+
+        if (roles.isEmpty()) {
+            throw new ValidationException(
+                    "At least one valid designation is required"
             );
         }
 
@@ -231,8 +326,8 @@ public class AdminManagementServiceImpl implements AdminManagementService {
             department = departmentRepo
                     .findById(req.getDepartmentId())
                     .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Department not found"));
+                            new NotFoundException(
+                                    "Department not found with ID: " + req.getDepartmentId()));
         }
 
         AcademicDivision division = null;
@@ -242,8 +337,8 @@ public class AdminManagementServiceImpl implements AdminManagementService {
             division = divisionRepo
                     .findById(req.getDivisionId())
                     .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Division not found"));
+                            new NotFoundException(
+                                    "Division not found with ID: " + req.getDivisionId()));
         }
 
         HostelFloor floor = null;
@@ -253,19 +348,40 @@ public class AdminManagementServiceImpl implements AdminManagementService {
             floor = floorRepo
                     .findById(req.getFloorId())
                     .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Floor not found"));
+                            new NotFoundException(
+                                    "Floor not found with ID: " + req.getFloorId()));
         }
 
-        Set<Role> roles =
-                new HashSet<>(
-                        roleRepo.findAllById(req.getRoleIds())
-                );
+        // Scope consistency validation
+        if (requiresDepartment(roles) && department == null) {
+            String roleName = getRoleRequiringDepartment(roles);
+            throw new ValidationException(String.format(
+                    "Cannot assign department-scoped designation '%s': staff member does not have an assigned department",
+                    roleName));
+        }
 
-        if (roles.isEmpty()) {
-            throw new RuntimeException(
-                    "At least one role required"
-            );
+        if (requiresDivision(roles) && division == null) {
+            String roleName = getRoleRequiringDivision(roles);
+            throw new ValidationException(String.format(
+                    "Cannot assign division-scoped designation '%s': staff member does not have an assigned academic division",
+                    roleName));
+        }
+
+        if (requiresFloor(roles) && floor == null) {
+            String roleName = getRoleRequiringFloor(roles);
+            throw new ValidationException(String.format(
+                    "Cannot assign floor-scoped designation '%s': staff member does not have an assigned hostel floor",
+                    roleName));
+        }
+
+        // Dependent dropdown integrity: division belongs to department
+        if (division != null && department == null) {
+            throw new ValidationException("Cannot assign academic division without an assigned department");
+        }
+
+        if (division != null && department != null && division.getDepartment() != null
+                && !division.getDepartment().getDepartmentId().equals(department.getDepartmentId())) {
+            throw new ValidationException("Selected academic division does not belong to the assigned department");
         }
 
         // Create User
@@ -328,17 +444,18 @@ public class AdminManagementServiceImpl implements AdminManagementService {
 
         StaffInfo staff = staffRepo.findById(staffId)
                 .orElseThrow(() ->
-                        new RuntimeException("Staff not found"));
+                        new NotFoundException("Staff not found with ID: " + staffId));
 
         return mapToStaffResponse(staff);
     }
 
     @Override
-    public StaffResponse updateStaff(Long staffId,UpdateStaffRequest req) {
+    @Transactional
+    public StaffResponse updateStaff(Long staffId, UpdateStaffRequest req) {
 
         StaffInfo staff = staffRepo.findById(staffId)
                 .orElseThrow(() ->
-                        new RuntimeException("Staff not found"));
+                        new NotFoundException("Staff not found with ID: " + staffId));
 
         if (req.getName() != null) {
             staff.setName(req.getName());
@@ -348,42 +465,87 @@ public class AdminManagementServiceImpl implements AdminManagementService {
             staff.setPhone(req.getPhone());
         }
 
+        // Determine target designations
+        Set<Role> targetRoles;
+        if (req.getRoleIds() != null) {
+            if (req.getRoleIds().isEmpty()) {
+                throw new ValidationException("At least one designation is required");
+            }
+            targetRoles = new HashSet<>(roleRepo.findAllById(req.getRoleIds()));
+            if (targetRoles.isEmpty()) {
+                throw new ValidationException("At least one valid designation is required");
+            }
+
+            // Invariant: Preserve platform administrator system identity (roleId 1)
+            // if this staff member previously held it.
+            boolean hadSystemAdmin = staff.getRoles() != null && staff.getRoles().stream()
+                    .anyMatch(r -> Long.valueOf(1L).equals(r.getRoleId()) && "ADMIN".equalsIgnoreCase(r.getRoleName()));
+            if (hadSystemAdmin) {
+                Role adminRole = roleRepo.findById(1L).orElse(null);
+                if (adminRole != null) {
+                    targetRoles.add(adminRole);
+                }
+            }
+        } else {
+            targetRoles = staff.getRoles() != null ? staff.getRoles() : Collections.emptySet();
+        }
+
+        // Department assignment or safe removal
+        Department targetDept = null;
         if (req.getDepartmentId() != null) {
-
-            staff.setDepartment(
-                    departmentRepo.findById(req.getDepartmentId())
-                            .orElseThrow(() ->
-                                    new RuntimeException("Department not found"))
-            );
+            targetDept = departmentRepo.findById(req.getDepartmentId())
+                    .orElseThrow(() ->
+                            new NotFoundException("Department not found with ID: " + req.getDepartmentId()));
+        } else {
+            // Null indicates unassigned / removal
+            if (requiresDepartment(targetRoles)) {
+                String roleName = getRoleRequiringDepartment(targetRoles);
+                throw new ValidationException(String.format(
+                        "Cannot unassign department: designation '%s' requires a department assignment", roleName));
+            }
         }
 
+        // Academic Division assignment or safe removal
+        AcademicDivision targetDivision = null;
         if (req.getDivisionId() != null) {
-
-            staff.setAcademicDivision(
-                    divisionRepo.findById(req.getDivisionId())
-                            .orElseThrow(() ->
-                                    new RuntimeException("Division not found"))
-            );
+            targetDivision = divisionRepo.findById(req.getDivisionId())
+                    .orElseThrow(() ->
+                            new NotFoundException("Division not found with ID: " + req.getDivisionId()));
+            if (targetDept == null) {
+                throw new ValidationException("Cannot assign academic division without an assigned department");
+            }
+            if (targetDivision.getDepartment() != null
+                    && !targetDivision.getDepartment().getDepartmentId().equals(targetDept.getDepartmentId())) {
+                throw new ValidationException("Selected academic division does not belong to the assigned department");
+            }
+        } else {
+            // Null indicates unassigned / removal
+            if (requiresDivision(targetRoles)) {
+                String roleName = getRoleRequiringDivision(targetRoles);
+                throw new ValidationException(String.format(
+                        "Cannot unassign academic division: designation '%s' requires a division assignment", roleName));
+            }
         }
 
+        // Hostel Floor assignment or safe removal
+        HostelFloor targetFloor = null;
         if (req.getFloorId() != null) {
-
-            staff.setFloor(
-                    floorRepo.findById(req.getFloorId())
-                            .orElseThrow(() ->
-                                    new RuntimeException("Floor not found"))
-            );
+            targetFloor = floorRepo.findById(req.getFloorId())
+                    .orElseThrow(() ->
+                            new NotFoundException("Floor not found with ID: " + req.getFloorId()));
+        } else {
+            // Null indicates unassigned / removal
+            if (requiresFloor(targetRoles)) {
+                String roleName = getRoleRequiringFloor(targetRoles);
+                throw new ValidationException(String.format(
+                        "Cannot unassign hostel floor: designation '%s' requires a floor assignment", roleName));
+            }
         }
 
-        if (req.getRoleIds() != null &&
-                !req.getRoleIds().isEmpty()) {
-
-            staff.setRoles(
-                    new HashSet<>(
-                            roleRepo.findAllById(req.getRoleIds())
-                    )
-            );
-        }
+        staff.setDepartment(targetDept);
+        staff.setAcademicDivision(targetDivision);
+        staff.setFloor(targetFloor);
+        staff.setRoles(targetRoles);
 
         staff = staffRepo.save(staff);
 
@@ -391,13 +553,51 @@ public class AdminManagementServiceImpl implements AdminManagementService {
     }
 
     @Override
+    @Transactional
     public StatusResponse disableStaff(Long staffId) {
 
         StaffInfo staff = staffRepo.findById(staffId)
                 .orElseThrow(() ->
-                        new RuntimeException("Staff not found"));
+                        new NotFoundException("Staff not found with ID: " + staffId));
 
         User user = staff.getUser();
+        if (user == null) {
+            throw new ValidationException("Staff member has no associated user account");
+        }
+
+        if (!user.isEnabled()) {
+            return new StatusResponse(
+                    "Staff disabled successfully"
+            );
+        }
+
+        // Prevent accidental disabling of the last usable platform administrator account
+        boolean isPlatformAdmin = staff.getRoles() != null && staff.getRoles().stream()
+                .anyMatch(r -> SYSTEM_ADMIN_ROLE_ID.equals(r.getRoleId()) && SYSTEM_ADMIN_ROLE_NAME.equalsIgnoreCase(r.getRoleName()));
+
+        if (isPlatformAdmin) {
+            // Concurrency-safe anchor lock:
+            // Acquire a pessimistic write lock on the platform administrator system role record (role_id = 1).
+            // Any concurrent admin deactivations will serialize on this row lock.
+            roleRepo.findByIdWithPessimisticLock(SYSTEM_ADMIN_ROLE_ID)
+                    .orElseThrow(() -> new ValidationException("System administrator role not found"));
+
+            // Perform locking current read on active platform administrator staff
+            List<StaffInfo> activeAdmins = staffRepo.findActiveStaffByRoleWithLock(SYSTEM_ADMIN_ROLE_ID, SYSTEM_ADMIN_ROLE_NAME);
+
+            // Check if the staff member being disabled is currently one of the active administrators
+            boolean isStaffActiveAdmin = activeAdmins.stream()
+                    .anyMatch(a -> a.getStaffId().equals(staff.getStaffId()));
+
+            if (!isStaffActiveAdmin) {
+                // The staff member is already disabled in the database
+                return new StatusResponse("Staff disabled successfully");
+            }
+
+            if (activeAdmins.size() <= 1) {
+                throw new ValidationException("Cannot disable the last active platform administrator account");
+            }
+        }
 
         user.setEnabled(false);
 
@@ -405,6 +605,34 @@ public class AdminManagementServiceImpl implements AdminManagementService {
 
         return new StatusResponse(
                 "Staff disabled successfully"
+        );
+    }
+
+    @Override
+    @Transactional
+    public StatusResponse enableStaff(Long staffId) {
+
+        StaffInfo staff = staffRepo.findById(staffId)
+                .orElseThrow(() ->
+                        new NotFoundException("Staff not found with ID: " + staffId));
+
+        User user = staff.getUser();
+        if (user == null) {
+            throw new ValidationException("Staff member has no associated user account");
+        }
+
+        if (user.isEnabled()) {
+            return new StatusResponse(
+                    "Staff enabled successfully"
+            );
+        }
+
+        user.setEnabled(true);
+
+        userRepo.save(user);
+
+        return new StatusResponse(
+                "Staff enabled successfully"
         );
     }
 

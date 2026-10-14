@@ -3,7 +3,11 @@ package com.sgms.sgms_backend.repository;
 import com.sgms.sgms_backend.model.Role;
 import com.sgms.sgms_backend.model.StaffInfo;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -73,6 +77,17 @@ public interface StaffInfoRepository extends JpaRepository<StaffInfo, Long> {
     Optional<StaffInfo> findFirstByRolesContains(Role role);
 
     List<StaffInfo> findAllByRolesContains(Role role);
+
+    long countByRolesContains(Role role);
+
+    boolean existsByRolesContains(Role role);
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("SELECT s FROM StaffInfo s JOIN s.roles r WHERE r.roleId = :roleId AND UPPER(r.roleName) = :roleName AND s.user.enabled = true")
+    List<StaffInfo> findActiveStaffByRoleWithLock(@Param("roleId") Long roleId, @Param("roleName") String roleName);
+
+    @Query("SELECT s FROM StaffInfo s JOIN s.roles r WHERE r.roleId = :roleId AND UPPER(r.roleName) = :roleName AND s.user.enabled = true")
+    List<StaffInfo> findActiveStaffByRole(@Param("roleId") Long roleId, @Param("roleName") String roleName);
 
     List<StaffInfo> findByDepartment_DepartmentId(Long departmentId);
 

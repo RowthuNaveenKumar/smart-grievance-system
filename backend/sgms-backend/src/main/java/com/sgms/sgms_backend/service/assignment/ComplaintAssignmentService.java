@@ -28,13 +28,58 @@ public class ComplaintAssignmentService {
         this.staffRepo = staffRepo;
     }
 
+    public java.util.Optional<StaffInfo> findStaffForRole(Complaint complaint, Role role) {
+        if (complaint == null || role == null || role.getAssignmentScope() == null) {
+            return java.util.Optional.empty();
+        }
+        switch (role.getAssignmentScope()) {
+            case DIVISION:
+                if (complaint.getStudent() == null || complaint.getStudent().getAcademicDivision() == null) {
+                    return java.util.Optional.empty();
+                }
+                return staffRepo.findByAcademicDivision_DivisionIdAndRolesContains(
+                        complaint.getStudent().getAcademicDivision().getDivisionId(),
+                        role);
+            case FLOOR:
+                Room room = complaint.getStudent() != null ? complaint.getStudent().getRoom() : null;
+                if (room == null || room.getHostelFloor() == null) {
+                    if (complaint.getDepartment() != null) {
+                        return staffRepo.findByDepartment_DepartmentIdAndRolesContains(
+                                complaint.getDepartment().getDepartmentId(),
+                                role);
+                    }
+                    return java.util.Optional.empty();
+                }
+                return staffRepo.findByFloor_FloorIdAndRolesContains(
+                        room.getHostelFloor().getFloorId(),
+                        role);
+            case DEPARTMENT:
+                if (complaint.getDepartment() == null) {
+                    return java.util.Optional.empty();
+                }
+                return staffRepo.findByDepartment_DepartmentIdAndRolesContains(
+                        complaint.getDepartment().getDepartmentId(),
+                        role);
+            case GLOBAL:
+                return staffRepo.findFirstByRolesContains(role);
+            default:
+                return java.util.Optional.empty();
+        }
+    }
+
     public StaffInfo assignStaff(Complaint complaint, Integer level) {
 
-        Workflow workflow =
-                workflowRepo.findByDepartmentDepartmentIdAndActiveTrue(
-                                complaint.getDepartment().getDepartmentId())
-                        .orElseThrow(() -> new RuntimeException("Active workflow not found for department: "
-                                + complaint.getDepartment().getName()));
+        Workflow workflow = complaint.getWorkflow();
+        if (workflow == null && complaint.getDepartment() != null) {
+            workflow = workflowRepo.findByDepartmentDepartmentIdAndActiveTrue(
+                            complaint.getDepartment().getDepartmentId())
+                    .orElse(null);
+        }
+
+        if (workflow == null) {
+            throw new RuntimeException("Active workflow not found for department: "
+                    + (complaint.getDepartment() != null ? complaint.getDepartment().getName() : "None"));
+        }
 
         WorkflowStep step =
                 workflowStepRepo.findByWorkflowWorkflowIdAndLevel(
@@ -42,49 +87,7 @@ public class ComplaintAssignmentService {
                         .orElseThrow(() -> new RuntimeException("Workflow step not found at level " + level));
 
         Role role = step.getRole();
-
-        switch (role.getAssignmentScope()) {
-
-            case DIVISION:
-                return staffRepo
-                        .findByAcademicDivision_DivisionIdAndRolesContains(
-                                complaint.getStudent().getAcademicDivision().getDivisionId(),
-                                role)
-                        .orElseThrow(() -> new RuntimeException("No staff found for division"));
-
-            case FLOOR:
-                // Null-safe: student may not have a room assigned
-                Room room = complaint.getStudent().getRoom();
-                if (room == null || room.getHostelFloor() == null) {
-                    log.warn("Student has no room/floor assigned; falling back to DEPARTMENT scope for assignment");
-                    return staffRepo
-                            .findByDepartment_DepartmentIdAndRolesContains(
-                                    complaint.getDepartment().getDepartmentId(),
-                                    role)
-                            .orElseThrow(() -> new RuntimeException("No department staff found as FLOOR fallback"));
-                }
-                return staffRepo
-                        .findByFloor_FloorIdAndRolesContains(
-                                room.getHostelFloor().getFloorId(),
-                                role)
-                        .orElseThrow(() -> new RuntimeException("No floor staff found for floor: "
-                                + room.getHostelFloor().getFloorId()));
-
-            case DEPARTMENT:
-                return staffRepo
-                        .findByDepartment_DepartmentIdAndRolesContains(
-                                complaint.getDepartment().getDepartmentId(),
-                                role)
-                        .orElseThrow(() -> new RuntimeException("No department staff found"));
-
-            case GLOBAL:
-                return staffRepo
-                        .findFirstByRolesContains(role)
-                        .orElseThrow(() -> new RuntimeException("No global staff found with role: "
-                                + role.getRoleName()));
-
-            default:
-                throw new RuntimeException("Invalid assignment scope: " + role.getAssignmentScope());
-        }
+        return findStaffForRole(complaint, role)
+                .orElseThrow(() -> new RuntimeException("No staff found for role: " + (role != null ? role.getRoleName() : "null")));
     }
 }

@@ -27,6 +27,9 @@ public class AuthServiceImpl implements AuthService {
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
 
+    public static final Long SYSTEM_ADMIN_ROLE_ID = 1L;
+    public static final String SYSTEM_ADMIN_ROLE_NAME = "ADMIN";
+
     @Override
     public AuthResponse login(LoginRequest req){
 
@@ -44,29 +47,44 @@ public class AuthServiceImpl implements AuthService {
         // System role (for Spring Security)
         String role = user.getAccountType().name();   // STUDENT or STAFF
 
-        // Business role (for workflow)
+        // Business role / designation
         String subRole = null;
 
-        if(user.getAccountType() == AccountType.STAFF){
+        if (user.getAccountType() == AccountType.STAFF) {
 
             StaffInfo staff = staffRepo.findByUser_UserId(user.getUserId())
                     .orElseThrow(() -> new RuntimeException("Staff not found"));
 
-            subRole = staff.getRoles()
-                    .stream()
-                    .map(Role::getRoleName)
-                    .findFirst()
-                    .orElse(null);
+            // Invariant: Platform administrator privileges must derive ONLY from trusted system-role identity
+            // (roleId == 1L && roleName == "ADMIN"), never from an organizational designation named "ADMIN".
+            boolean isPlatformAdmin = staff.getRoles() != null && staff.getRoles().stream()
+                    .anyMatch(r -> r.getRoleId() != null && SYSTEM_ADMIN_ROLE_ID.equals(r.getRoleId())
+                            && SYSTEM_ADMIN_ROLE_NAME.equalsIgnoreCase(r.getRoleName()));
+
+            if (isPlatformAdmin) {
+                // If staff member has platform administrator privileges, prioritize ADMIN
+                // so administrative privileges are retained consistently even when they hold
+                // additional workflow designations (e.g. WARDEN, HOD).
+                subRole = "ADMIN";
+            } else if (staff.getRoles() != null && !staff.getRoles().isEmpty()) {
+                subRole = staff.getRoles().stream()
+                        .map(Role::getRoleName)
+                        .filter(rn -> rn != null && !SYSTEM_ADMIN_ROLE_NAME.equalsIgnoreCase(rn))
+                        .findFirst()
+                        .orElse(null);
+            }
         }
 
         String token = jwtUtil.generateToken(
                 user.getEmail(),
                 role,      // STAFF
-                subRole,   // WARDEN
+                subRole,   // ADMIN (if admin) or workflow designation
                 user.getAccountType().name()
         );
 
-        return new AuthResponse(token, role, user.getAccountType().name());
+        String responseRole = "ADMIN".equalsIgnoreCase(subRole) ? "ADMIN" : role;
+
+        return new AuthResponse(token, responseRole, user.getAccountType().name());
     }
 
     @Override
